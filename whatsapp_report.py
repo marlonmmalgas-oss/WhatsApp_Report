@@ -231,14 +231,14 @@ _________________________
    *HOURLY MOVES*
 _________________________
 *Crane Moves*
-           Load    Discharge
+           Load   Discharge
 FWD        {pv['fwd_load']:>5}     {pv['fwd_disch']:>5}
 MID        {pv['mid_load']:>5}     {pv['mid_disch']:>5}
 AFT        {pv['aft_load']:>5}     {pv['aft_disch']:>5}
 POOP       {pv['poop_load']:>5}     {pv['poop_disch']:>5}
 _________________________
 *Restows*
-           Load    Discharge
+           Load   Discharge
 FWD        {pv['fwd_restow_load']:>5}     {pv['fwd_restow_disch']:>5}
 MID        {pv['mid_restow_load']:>5}     {pv['mid_restow_disch']:>5}
 AFT        {pv['aft_restow_load']:>5}     {pv['aft_restow_disch']:>5}
@@ -246,19 +246,19 @@ POOP       {pv['poop_restow_load']:>5}     {pv['poop_restow_disch']:>5}
 _________________________
       *CUMULATIVE*
 _________________________
-           Load    Discharge
+           Load   Discharge
 Plan       {data['planned_load']:>5}      {data['planned_disch']:>5}
 Done       {data.get('done_load',0):>5}      {data.get('done_disch',0):>5}
 Remain     {remaining_load:>5}      {remaining_disch:>5}
 _________________________
 *Restows*
-           Load    Discharge
+           Load   Discharge
 Plan       {data['planned_restow_load']:>5}      {data['planned_restow_disch']:>5}
 Done       {data.get('done_restow_load',0):>5}      {data.get('done_restow_disch',0):>5}
 Remain     {remaining_restow_load:>5}      {remaining_restow_disch:>5}
 _________________________
 *Hatch Moves*
-            Open        Close
+            Open      Close
 FWD        {pv['hatch_fwd_open']:>5}      {pv['hatch_fwd_close']:>5}
 MID        {pv['hatch_mid_open']:>5}      {pv['hatch_mid_close']:>5}
 AFT        {pv['hatch_aft_open']:>5}      {pv['hatch_aft_close']:>5}
@@ -403,14 +403,14 @@ _________________________
    *HOURLY MOVES*
 _________________________
 *Crane Moves*
-           Load     Discharge
+           Load    Discharge
 FWD        {fwd_load_4h:>5}     {fwd_disch_4h:>5}
 MID        {mid_load_4h:>5}     {mid_disch_4h:>5}
 AFT        {aft_load_4h:>5}     {aft_disch_4h:>5}
 POOP       {poop_load_4h:>5}     {poop_disch_4h:>5}
 _________________________
 *Restows*
-           Load     Discharge
+           Load    Discharge
 FWD        {fwd_restow_load_4h:>5}     {fwd_restow_disch_4h:>5}
 MID        {mid_restow_load_4h:>5}     {mid_restow_disch_4h:>5}
 AFT        {aft_restow_load_4h:>5}     {aft_restow_disch_4h:>5}
@@ -418,7 +418,7 @@ POOP       {poop_restow_load_4h:>5}     {poop_restow_disch_4h:>5}
 _________________________
       *CUMULATIVE* (from hourly saved entries)
 _________________________
-           Load    Discharge
+           Load   Discharge
 Plan       {data['planned_load']:>5}      {data['planned_disch']:>5}
 Done       {data.get('done_load',0):>5}      {data.get('done_disch',0):>5}
 Remain     {remaining_load_now:>5}      {remaining_disch_now:>5}
