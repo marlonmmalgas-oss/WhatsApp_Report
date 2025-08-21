@@ -1,9 +1,9 @@
 import streamlit as st
 import json
 import os
-from datetime import datetime
-import pytz
 import urllib.parse
+from datetime import datetime, time
+import pytz
 
 SAVE_FILE = "vessel_report.json"
 
@@ -17,30 +17,26 @@ if os.path.exists(SAVE_FILE):
 else:
     cumulative = {}
 
-# --- Default values ---
+# Default structure
 defaults = {
     "done_load": 0, "done_disch": 0,
     "done_restow_load": 0, "done_restow_disch": 0,
     "done_hatch_open": 0, "done_hatch_close": 0,
-    "last_hour": None, "last_4h_slot": None,
+    "last_hour": None, "last_4h_sent": None,
     "vessel_name": "MSC NILA",
     "berthed_date": "14/08/2025 @ 10H55",
-    "first_lift": "18h25", "last_lift": "10h31",
     "planned_load": 687, "planned_disch": 38,
     "planned_restow_load": 13, "planned_restow_disch": 13,
     "opening_load": 0, "opening_disch": 0,
     "opening_restow_load": 0, "opening_restow_disch": 0,
-    "last4_fwd_load": [], "last4_mid_load": [], "last4_aft_load": [], "last4_poop_load": [],
-    "last4_fwd_disch": [], "last4_mid_disch": [], "last4_aft_disch": [], "last4_poop_disch": [],
-    "last4_fwd_restow_load": [], "last4_mid_restow_load": [], "last4_aft_restow_load": [], "last4_poop_restow_load": [],
-    "last4_fwd_restow_disch": [], "last4_mid_restow_disch": [], "last4_aft_restow_disch": [], "last4_poop_restow_disch": []
+    "hourly_records": []
 }
 
-for key, value in defaults.items():
+for key, val in defaults.items():
     if key not in cumulative:
-        cumulative[key] = value
+        cumulative[key] = val
 
-# --- Timezone ---
+# --- Current South African Date ---
 sa_tz = pytz.timezone("Africa/Johannesburg")
 today_date = datetime.now(sa_tz).strftime("%d/%m/%Y")
 
@@ -50,10 +46,13 @@ st.title("Vessel Hourly Moves Tracker")
 st.header("Vessel Info")
 vessel_name = st.text_input("Vessel Name", cumulative["vessel_name"])
 berthed_date = st.text_input("Berthed Date", cumulative["berthed_date"])
-first_lift = st.text_input("First Lift Time", cumulative["first_lift"])
-last_lift = st.text_input("Last Lift Time", cumulative["last_lift"])
 
-# --- Plan Totals & Opening Balance (internal) ---
+# --- First and Last Lift (manual) ---
+st.header("Lift Times")
+first_lift = st.text_input("First Lift (HH:MM)", "18h25")
+last_lift = st.text_input("Last Lift (HH:MM)", "10h31")
+
+# --- Plan Totals & Opening Balance (internal only) ---
 st.header("Plan Totals & Opening Balance (Internal Only)")
 col1, col2 = st.columns(2)
 with col1:
@@ -67,40 +66,33 @@ with col2:
     opening_restow_load = st.number_input("Opening Restow Load (Deduction)", value=cumulative["opening_restow_load"])
     opening_restow_disch = st.number_input("Opening Restow Discharge (Deduction)", value=cumulative["opening_restow_disch"])
 
-# --- Hourly Time Dropdown ---
+# --- Hourly Time Dropdown (full 24h) ---
 st.header("Hourly Time")
-hours_list = [f"{str(h).zfill(2)}h00 - {str((h+1)%24).zfill(2)}h00" for h in range(24)]
+hours_list = []
+for h in range(24):
+    start_hour = h
+    end_hour = (h + 1) % 24
+    hours_list.append(f"{str(start_hour).zfill(2)}h00 - {str(end_hour).zfill(2)}h00")
+
 default_hour = cumulative.get("last_hour") or "06h00 - 07h00"
-hourly_time = st.selectbox("Select Hourly Time", hours_list, index=hours_list.index(default_hour))
+hourly_time = st.selectbox("Select Hourly Time", options=hours_list, index=hours_list.index(default_hour))
 
 # --- Hourly Moves ---
 st.header(f"Hourly Moves Input ({hourly_time})")
 
-st.subheader("FWD Crane")
-fwd_load = st.number_input("FWD Load", min_value=0, value=0, key="fwd_load")
-fwd_disch = st.number_input("FWD Discharge", min_value=0, value=0, key="fwd_disch")
+# FWD, MID, AFT, POOP sections
+def crane_input_section(label):
+    st.subheader(label)
+    fwd = st.number_input(f"{label} FWD", min_value=0, value=0)
+    mid = st.number_input(f"{label} MID", min_value=0, value=0)
+    aft = st.number_input(f"{label} AFT", min_value=0, value=0)
+    poop = st.number_input(f"{label} POOP", min_value=0, value=0)
+    return fwd, mid, aft, poop
 
-st.subheader("MID Crane")
-mid_load = st.number_input("MID Load", min_value=0, value=0, key="mid_load")
-mid_disch = st.number_input("MID Discharge", min_value=0, value=0, key="mid_disch")
-
-st.subheader("AFT Crane")
-aft_load = st.number_input("AFT Load", min_value=0, value=0, key="aft_load")
-aft_disch = st.number_input("AFT Discharge", min_value=0, value=0, key="aft_disch")
-
-st.subheader("POOP Crane")
-poop_load = st.number_input("POOP Load", min_value=0, value=0, key="poop_load")
-poop_disch = st.number_input("POOP Discharge", min_value=0, value=0, key="poop_disch")
-
-st.subheader("Restows")
-fwd_restow_load = st.number_input("FWD Restow Load", min_value=0, value=0)
-fwd_restow_disch = st.number_input("FWD Restow Discharge", min_value=0, value=0)
-mid_restow_load = st.number_input("MID Restow Load", min_value=0, value=0)
-mid_restow_disch = st.number_input("MID Restow Discharge", min_value=0, value=0)
-aft_restow_load = st.number_input("AFT Restow Load", min_value=0, value=0)
-aft_restow_disch = st.number_input("AFT Restow Discharge", min_value=0, value=0)
-poop_restow_load = st.number_input("POOP Restow Load", min_value=0, value=0)
-poop_restow_disch = st.number_input("POOP Restow Discharge", min_value=0, value=0)
+fwd_load, mid_load, aft_load, poop_load = crane_input_section("Load")
+fwd_disch, mid_disch, aft_disch, poop_disch = crane_input_section("Discharge")
+fwd_restow_load, mid_restow_load, aft_restow_load, poop_restow_load = crane_input_section("Restow Load")
+fwd_restow_disch, mid_restow_disch, aft_restow_disch, poop_restow_disch = crane_input_section("Restow Disch")
 
 st.subheader("Hatch Moves")
 hatch_fwd_open = st.number_input("FWD Hatch Open", min_value=0, value=0)
@@ -110,19 +102,18 @@ hatch_mid_close = st.number_input("MID Hatch Close", min_value=0, value=0)
 hatch_aft_open = st.number_input("AFT Hatch Open", min_value=0, value=0)
 hatch_aft_close = st.number_input("AFT Hatch Close", min_value=0, value=0)
 
-# --- WhatsApp Options ---
+# --- WhatsApp Input ---
 st.header("Send to WhatsApp")
-wa_option = st.radio("Choose WhatsApp Destination:", ["Private Number", "Group Link"])
-if wa_option == "Private Number":
+wa_type = st.selectbox("Send to", ["Private Number", "Group Link"])
+if wa_type == "Private Number":
     whatsapp_number = st.text_input("Enter WhatsApp Number (with country code, e.g., 27761234567)")
-    wa_link = f"https://wa.me/{whatsapp_number}?text={urllib.parse.quote('template')}" if whatsapp_number else ""
 else:
-    group_link = st.text_input("Enter WhatsApp Group Invite Link")
-    wa_link = f"{group_link}?text={urllib.parse.quote('template')}" if group_link else ""
+    whatsapp_group = st.text_input("Enter WhatsApp Group Link")
 
 # --- Submit Button ---
-if st.button("Update & Show Template"):
-    # Update cumulative
+if st.button("Submit Hourly Moves"):
+
+    # Update cumulative totals
     cumulative["done_load"] += fwd_load + mid_load + aft_load + poop_load
     cumulative["done_disch"] += fwd_disch + mid_disch + aft_disch + poop_disch
     cumulative["done_restow_load"] += fwd_restow_load + mid_restow_load + aft_restow_load + poop_restow_load
@@ -131,15 +122,32 @@ if st.button("Update & Show Template"):
     cumulative["done_hatch_close"] += hatch_fwd_close + hatch_mid_close + hatch_aft_close
     cumulative["last_hour"] = hourly_time
 
+    # Save persistent editable fields
     cumulative.update({
-        "vessel_name": vessel_name, "berthed_date": berthed_date,
-        "first_lift": first_lift, "last_lift": last_lift,
-        "planned_load": planned_load, "planned_disch": planned_disch,
-        "planned_restow_load": planned_restow_load, "planned_restow_disch": planned_restow_disch,
-        "opening_load": opening_load, "opening_disch": opening_disch,
-        "opening_restow_load": opening_restow_load, "opening_restow_disch": opening_restow_disch
+        "vessel_name": vessel_name,
+        "berthed_date": berthed_date,
+        "planned_load": planned_load,
+        "planned_disch": planned_disch,
+        "planned_restow_load": planned_restow_load,
+        "planned_restow_disch": planned_restow_disch,
+        "opening_load": opening_load,
+        "opening_disch": opening_disch,
+        "opening_restow_load": opening_restow_load,
+        "opening_restow_disch": opening_restow_disch,
     })
 
+    # Record hourly for 4-hourly report
+    cumulative["hourly_records"].append({
+        "fwd_load": fwd_load, "mid_load": mid_load, "aft_load": aft_load, "poop_load": poop_load,
+        "fwd_disch": fwd_disch, "mid_disch": mid_disch, "aft_disch": aft_disch, "poop_disch": poop_disch,
+        "fwd_restow_load": fwd_restow_load, "mid_restow_load": mid_restow_load, "aft_restow_load": aft_restow_load, "poop_restow_load": poop_restow_load,
+        "fwd_restow_disch": fwd_restow_disch, "mid_restow_disch": mid_restow_disch, "aft_restow_disch": aft_restow_disch, "poop_restow_disch": poop_restow_disch,
+        "hatch_fwd_open": hatch_fwd_open, "hatch_fwd_close": hatch_fwd_close,
+        "hatch_mid_open": hatch_mid_open, "hatch_mid_close": hatch_mid_close,
+        "hatch_aft_open": hatch_aft_open, "hatch_aft_close": hatch_aft_close
+    })
+
+    # Save to JSON
     with open(SAVE_FILE, "w") as f:
         json.dump(cumulative, f)
 
@@ -149,7 +157,7 @@ if st.button("Update & Show Template"):
     remaining_restow_load = planned_restow_load - cumulative["done_restow_load"] - opening_restow_load
     remaining_restow_disch = planned_restow_disch - cumulative["done_restow_disch"] - opening_restow_disch
 
-    # --- Template ---
+    # --- WhatsApp Template ---
     template = f"""\
 {vessel_name}
 Berthed {berthed_date}
@@ -201,7 +209,26 @@ _________________________
 *Idle*
 """
 
-    st.code(template, language="text")
+    # --- Display template ---
+    st.subheader("Generated WhatsApp Template")
+    st.code(template)
 
-    if wa_link:
+    # --- WhatsApp Sending ---
+    wa_template = f"```{template}```"
+    if wa_type == "Private Number" and whatsapp_number:
+        wa_link = f"https://wa.me/{whatsapp_number}?text={urllib.parse.quote(wa_template)}"
         st.markdown(f"[Open WhatsApp]({wa_link})", unsafe_allow_html=True)
+    elif wa_type == "Group Link" and whatsapp_group:
+        st.markdown(f"[Open WhatsApp Group]({whatsapp_group})", unsafe_allow_html=True)
+
+# --- 4-Hourly Report --- (optional display if 4 hours accumulated)
+if len(cumulative["hourly_records"]) >= 4:
+    last_4h = cumulative["hourly_records"][-4:]
+    total_fwd_load = sum(r["fwd_load"] for r in last_4h)
+    total_mid_load = sum(r["mid_load"] for r in last_4h)
+    total_aft_load = sum(r["aft_load"] for r in last_4h)
+    total_poop_load = sum(r["poop_load"] for r in last_4h)
+
+    # Similarly for discharge, restow, hatch moves
+    st.subheader("Automatic 4-Hourly Report (Last 4 Hours)")
+    st.code(f"FWD Load: {total_fwd_load}, MID Load: {total_mid_load}, AFT Load: {total_aft_load}, POOP Load: {total_poop_load}")
