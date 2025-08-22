@@ -68,9 +68,12 @@ with st.expander("Plan Totals & Opening Balance (Internal Only)", expanded=False
 # --- Hourly Time Dropdown ---
 hours_list = [f"{str(h).zfill(2)}h00 - {str((h+1)%24).zfill(2)}h00" for h in range(24)]
 default_hour = cumulative.get("last_hour", "06h00 - 07h00")
+
+# If default_hour not in hours_list, fallback to first hour
+if default_hour not in hours_list:
+    default_hour = hours_list[0]
+
 hourly_time = st.selectbox("Select Hourly Time", options=hours_list, index=hours_list.index(default_hour))
-# --- Hourly Moves Input ---
-st.header(f"Hourly Moves Input ({hourly_time})")
 
 with st.expander("Crane Moves", expanded=True):
     fwd_load = st.number_input("FWD Load", min_value=0, value=0)
