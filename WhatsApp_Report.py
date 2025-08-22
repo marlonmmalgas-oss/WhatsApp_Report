@@ -193,14 +193,14 @@ _________________________
 *HOURLY MOVES*
 _________________________
 *Crane Moves*
-            Load   Discharge
+           Load   Discharge
 FWD       {fwd_load:>5}     {fwd_disch:>5}
 MID       {mid_load:>5}     {mid_disch:>5}
 AFT       {aft_load:>5}     {aft_disch:>5}
 POOP      {poop_load:>5}     {poop_disch:>5}
 _________________________
 *Restows*
-            Load   Discharge
+           Load   Discharge
 FWD       {fwd_restow_load:>5}     {fwd_restow_disch:>5}
 MID       {mid_restow_load:>5}     {mid_restow_disch:>5}
 AFT       {aft_restow_load:>5}     {aft_restow_disch:>5}
@@ -208,19 +208,19 @@ POOP      {poop_restow_load:>5}     {poop_restow_disch:>5}
 _________________________
 *CUMULATIVE*
 _________________________
-            Load   Discharge
+           Load   Discharge
 Plan       {planned_load:>5}      {planned_disch:>5}
 Done       {cumulative['done_load']:>5}      {cumulative['done_disch']:>5}
 Remain     {remaining_load:>5}      {remaining_disch:>5}
 _________________________
 *Restows*
-            Load   Discharge
+           Load   Discharge
 Plan       {planned_restow_load:>5}      {planned_restow_disch:>5}
 Done       {cumulative['done_restow_load']:>5}      {cumulative['done_restow_disch']:>5}
 Remain     {remaining_restow_load:>5}      {remaining_restow_disch:>5}
 _________________________
 *Hatch Moves*
-            Open    Close
+           Open    Close
 FWD       {hatch_fwd_open:>5}      {hatch_fwd_close:>5}
 MID       {hatch_mid_open:>5}      {hatch_mid_close:>5}
 AFT       {hatch_aft_open:>5}      {hatch_aft_close:>5}
@@ -300,14 +300,14 @@ _________________________
    *HOURLY MOVES*
 _________________________
 *Crane Moves*
-           Load    Discharge
+           Load   Discharge
 FWD       {fwd_4h_load:>5}     {fwd_4h_disch:>5}
 MID       {mid_4h_load:>5}     {mid_4h_disch:>5}
 AFT       {aft_4h_load:>5}     {aft_4h_disch:>5}
 POOP      {poop_4h_load:>5}     {poop_4h_disch:>5}
 _________________________
 *Restows*
-           Load    Discharge
+           Load   Discharge
 FWD       {fwd_4h_restow_load:>5}     {fwd_4h_restow_disch:>5}
 MID       {mid_4h_restow_load:>5}     {mid_4h_restow_disch:>5}
 AFT       {aft_4h_restow_load:>5}     {aft_4h_restow_disch:>5}
@@ -315,19 +315,19 @@ POOP      {poop_4h_restow_load:>5}     {poop_4h_restow_disch:>5}
 _________________________
 *CUMULATIVE* (from hourly saved entries)
 _________________________
-           Load   Disch
+           Load   Discharge
 Plan       {planned_load:>5}      {planned_disch:>5}
 Done       {remain_4h_load:>5}      {remain_4h_disch:>5}
 Remain     {planned_load - remain_4h_load:>5}      {planned_disch - remain_4h_disch:>5}
 _________________________
 *Restows*
-           Load    Disch
+           Load   Discharge
 Plan       {planned_restow_load:>5}      {planned_restow_disch:>5}
 Done       {remain_4h_restow_load:>5}      {remain_4h_restow_disch:>5}
 Remain     {planned_restow_load - remain_4h_restow_load:>5}      {planned_restow_disch - remain_4h_restow_disch:>5}
 _________________________
 *Hatch Moves*
-             Open         Close
+             Open       Close
 FWD          {hatch_fwd_4h_open:>5}          {hatch_fwd_4h_close:>5}
 MID          {hatch_mid_4h_open:>5}          {hatch_mid_4h_close:>5}
 AFT          {hatch_aft_4h_open:>5}          {hatch_aft_4h_close:>5}
