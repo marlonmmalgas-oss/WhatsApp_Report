@@ -126,7 +126,9 @@ idle_options = [
     "Vessel listing",
     "Struggling to load container",
     "Cell guide struggles",
-    "Spreader difficulties"
+    "Spreader difficulties",
+    "No Delays"
+    
 ]
 
 with st.expander("Idle Entries"):
