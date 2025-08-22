@@ -318,7 +318,8 @@ if st.button("Generate 4-Hourly Template"):
         "_________________________",
         "           Load   Disch",
         f"Plan       {planned_load:>5}      {planned_disch:>5}",
-        f"Done       {cumulative['done_load']:>5}",    {cumulative['done_disch']:>5}",
+        f"Done       {cumulative['done_load']:>5}
+{cumulative['done_disch']:>5}",
         f"Remain     {remaining_load:>5}      {remaining_disch:>5}",
         "_________________________",
         "*Restows*",
