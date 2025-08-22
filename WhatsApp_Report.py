@@ -191,14 +191,14 @@ _________________________
    *HOURLY MOVES*
 _________________________
 *Crane Moves*
-           Load   Discharge
+            Load   Discharge
 FWD        {fwd_load:>5}     {fwd_disch:>5}
 MID        {mid_load:>5}     {mid_disch:>5}
 AFT        {aft_load:>5}     {aft_disch:>5}
 POOP       {poop_load:>5}     {poop_disch:>5}
 _________________________
 *Restows*
-           Load   Discharge
+            Load   Discharge
 FWD        {fwd_restow_load:>5}     {fwd_restow_disch:>5}
 MID        {mid_restow_load:>5}     {mid_restow_disch:>5}
 AFT        {aft_restow_load:>5}     {aft_restow_disch:>5}
@@ -206,19 +206,19 @@ POOP       {poop_restow_load:>5}     {poop_restow_disch:>5}
 _________________________
       *CUMULATIVE*
 _________________________
-           Load   Disch
+            Load   Discharge
 Plan       {planned_load:>5}      {planned_disch:>5}
 Done       {cumulative['done_load']:>5}      {cumulative['done_disch']:>5}
 Remain     {remaining_load:>5}      {remaining_disch:>5}
 _________________________
 *Restows*
-           Load   Disch
+            Load   Discharge
 Plan       {planned_restow_load:>5}      {planned_restow_disch:>5}
 Done       {cumulative['done_restow_load']:>5}      {cumulative['done_restow_disch']:>5}
 Remain     {remaining_restow_load:>5}      {remaining_restow_disch:>5}
 _________________________
 *Hatch Moves*
-           Open   Close
+            Open    Close
 FWD        {hatch_fwd_open:>5}      {hatch_fwd_close:>5}
 MID        {hatch_mid_open:>5}      {hatch_mid_close:>5}
 AFT        {hatch_aft_open:>5}      {hatch_aft_close:>5}
@@ -233,44 +233,72 @@ _________________________
     st.code(template_hourly, language="text")
 
     # --- 4-Hourly Report Section ---
-    st.header("4-Hourly Report")
-    four_hour_blocks = [
-        "06h00 - 10h00", "10h00 - 14h00", "14h00 - 18h00",
-        "18h00 - 22h00", "22h00 - 02h00", "02h00 - 06h00"
-    ]
-    four_hour_choice = st.selectbox("Select 4-Hour Block", options=four_hour_blocks)
+    # --- 4-Hourly Report Section ---
+st.header("4-Hourly Report")
+four_hour_blocks = [
+    "06h00 - 10h00", "10h00 - 14h00", "14h00 - 18h00",
+    "18h00 - 22h00", "22h00 - 02h00", "02h00 - 06h00"
+]
+four_hour_choice = st.selectbox("Select 4-Hour Block", options=four_hour_blocks)
 
-    # Sum last 4 hourly totals (example, you may implement actual rolling sums)
-    fwd_load_4h = fwd_load
-    mid_load_4h = mid_load
-    aft_load_4h = aft_load
-    poop_load_4h = poop_load
+# --- Collapsible Inputs for 4-Hourly Section ---
+with st.expander("Edit Crane Moves (Load / Discharge)"):
+    fwd_load_4h = st.number_input("FWD Load", min_value=0, value=fwd_load)
+    mid_load_4h = st.number_input("MID Load", min_value=0, value=mid_load)
+    aft_load_4h = st.number_input("AFT Load", min_value=0, value=aft_load)
+    poop_load_4h = st.number_input("POOP Load", min_value=0, value=poop_load)
 
-    fwd_disch_4h = fwd_disch
-    mid_disch_4h = mid_disch
-    aft_disch_4h = aft_disch
-    poop_disch_4h = poop_disch
+    fwd_disch_4h = st.number_input("FWD Discharge", min_value=0, value=fwd_disch)
+    mid_disch_4h = st.number_input("MID Discharge", min_value=0, value=mid_disch)
+    aft_disch_4h = st.number_input("AFT Discharge", min_value=0, value=aft_disch)
+    poop_disch_4h = st.number_input("POOP Discharge", min_value=0, value=poop_disch)
 
-    fwd_restow_load_4h = fwd_restow_load
-    mid_restow_load_4h = mid_restow_load
-    aft_restow_load_4h = aft_restow_load
-    poop_restow_load_4h = poop_restow_load
+with st.expander("Edit Restows (Load / Discharge)"):
+    fwd_restow_load_4h = st.number_input("FWD Restow Load", min_value=0, value=fwd_restow_load)
+    mid_restow_load_4h = st.number_input("MID Restow Load", min_value=0, value=mid_restow_load)
+    aft_restow_load_4h = st.number_input("AFT Restow Load", min_value=0, value=aft_restow_load)
+    poop_restow_load_4h = st.number_input("POOP Restow Load", min_value=0, value=poop_restow_load)
 
-    fwd_restow_disch_4h = fwd_restow_disch
-    mid_restow_disch_4h = mid_restow_disch
-    aft_restow_disch_4h = aft_restow_disch
-    poop_restow_disch_4h = poop_restow_disch
+    fwd_restow_disch_4h = st.number_input("FWD Restow Discharge", min_value=0, value=fwd_restow_disch)
+    mid_restow_disch_4h = st.number_input("MID Restow Discharge", min_value=0, value=mid_restow_disch)
+    aft_restow_disch_4h = st.number_input("AFT Restow Discharge", min_value=0, value=aft_restow_disch)
+    poop_restow_disch_4h = st.number_input("POOP Restow Discharge", min_value=0, value=poop_restow_disch)
 
-    hatch_fwd_open_4h = hatch_fwd_open
-    hatch_mid_open_4h = hatch_mid_open
-    hatch_aft_open_4h = hatch_aft_open
+with st.expander("Edit Hatch Moves (Open / Close)"):
+    hatch_fwd_open_4h = st.number_input("FWD Hatch Open", min_value=0, value=hatch_fwd_open)
+    hatch_mid_open_4h = st.number_input("MID Hatch Open", min_value=0, value=hatch_mid_open)
+    hatch_aft_open_4h = st.number_input("AFT Hatch Open", min_value=0, value=hatch_aft_open)
 
-    hatch_fwd_close_4h = hatch_fwd_close
-    hatch_mid_close_4h = hatch_mid_close
-    hatch_aft_close_4h = hatch_aft_close
+    hatch_fwd_close_4h = st.number_input("FWD Hatch Close", min_value=0, value=hatch_fwd_close)
+    hatch_mid_close_4h = st.number_input("MID Hatch Close", min_value=0, value=hatch_mid_close)
+    hatch_aft_close_4h = st.number_input("AFT Hatch Close", min_value=0, value=hatch_aft_close)
 
-    # Monospace 4-Hourly Template
-    template_4hour = f"""\
+# --- Idle / Delays Section ---
+with st.expander("Idle / Delays"):
+    idle_entries = []
+    for i in range(10):  # Up to 10 idles
+        st.subheader(f"Idle Entry {i+1}")
+        crane_idle = st.selectbox(f"Crane for Idle {i+1}", ["FWD", "MID", "AFT", "POOP"], key=f"crane_idle_{i}")
+        start_idle = st.text_input(f"Start Time {i+1} (hh:mm)", key=f"start_idle_{i}")
+        end_idle = st.text_input(f"End Time {i+1} (hh:mm)", key=f"end_idle_{i}")
+        delay_options = [
+            "Stevedore tea time/shift change", "Awaiting cargo", "Awaiting AGL operations",
+            "Awaiting FPT gang", "Awaiting Crane driver", "Awaiting onboard stevedores",
+            "Windbound", "Crane break down/ wipers", "Crane break down/ lights",
+            "Crane break down/ boom limit", "Crane break down", "Vessel listing",
+            "Struggling to load container", "Cell guide struggles", "Spreader difficulties"
+        ]
+        delay_idle = st.selectbox(f"Select Delay {i+1}", delay_options, key=f"delay_idle_{i}")
+        custom_delay = st.text_input(f"Or enter custom delay {i+1}", key=f"custom_delay_{i}")
+        idle_entries.append({
+            "crane": crane_idle,
+            "start": start_idle,
+            "end": end_idle,
+            "delay": custom_delay if custom_delay else delay_idle
+        })
+
+# --- Monospace Template with Cumulative ---
+template_4hour = f"""\
 {vessel_name}
 Berthed {berthed_date}
 
@@ -280,21 +308,34 @@ _________________________
    *HOURLY MOVES*
 _________________________
 *Crane Moves*
-           Load    Discharge
+            Load    Discharge
 FWD        {fwd_load_4h:>5}     {fwd_disch_4h:>5}
 MID        {mid_load_4h:>5}     {mid_disch_4h:>5}
 AFT        {aft_load_4h:>5}     {aft_disch_4h:>5}
 POOP       {poop_load_4h:>5}     {poop_disch_4h:>5}
 _________________________
 *Restows*
-           Load    Discharge
+            Load    Discharge
 FWD        {fwd_restow_load_4h:>5}     {fwd_restow_disch_4h:>5}
 MID        {mid_restow_load_4h:>5}     {mid_restow_disch_4h:>5}
 AFT        {aft_restow_load_4h:>5}     {aft_restow_disch_4h:>5}
 POOP       {poop_restow_load_4h:>5}     {poop_restow_disch_4h:>5}
 _________________________
+      *CUMULATIVE* (from hourly totals)
+_________________________
+            Load   Discharge
+Plan       {planned_load:>5}      {planned_disch:>5}
+Done       {cumulative['done_load']:>5}      {cumulative['done_disch']:>5}
+Remain     {planned_load - cumulative['done_load']:>5}      {planned_disch - cumulative['done_disch']:>5}
+_________________________
+*Restows*
+            Load    Discharge
+Plan       {planned_restow_load:>5}      {planned_restow_disch:>5}
+Done       {cumulative['done_restow_load']:>5}      {cumulative['done_restow_disch']:>5}
+Remain     {planned_restow_load - cumulative['done_restow_load']:>5}      {planned_restow_disch - cumulative['done_restow_disch']:>5}
+_________________________
 *Hatch Moves*
-           Open   Close
+            Open    Close
 FWD        {hatch_fwd_open_4h:>5}      {hatch_fwd_close_4h:>5}
 MID        {hatch_mid_open_4h:>5}      {hatch_mid_close_4h:>5}
 AFT        {hatch_aft_open_4h:>5}      {hatch_aft_close_4h:>5}
@@ -302,11 +343,11 @@ _________________________
 *Idle / Delays*
 """
 
-    for idle_entry in idle_list:
-        template_4hour += f"{idle_entry['crane']} {idle_entry['start']} - {idle_entry['end']} {idle_entry['delay']}\n"
+for idle_entry in idle_entries:
+    template_4hour += f"{idle_entry['crane']} {idle_entry['start']} - {idle_entry['end']} {idle_entry['delay']}\n"
 
-    st.subheader("4-Hourly Template Preview")
-    st.code(template_4hour, language="text")
+st.subheader("4-Hourly Template Preview")
+st.code(template_4hour, language="text")
 
     # --- Send to WhatsApp ---
     if whatsapp_number:
