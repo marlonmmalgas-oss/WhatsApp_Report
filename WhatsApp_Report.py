@@ -327,10 +327,10 @@ Done       {remain_4h_restow_load:>5}      {remain_4h_restow_disch:>5}
 Remain     {planned_restow_load - remain_4h_restow_load:>5}      {planned_restow_disch - remain_4h_restow_disch:>5}
 _________________________
 *Hatch Moves*
-             Open       Close
-FWD          {hatch_fwd_4h_open:>5}          {hatch_fwd_4h_close:>5}
-MID          {hatch_mid_4h_open:>5}          {hatch_mid_4h_close:>5}
-AFT          {hatch_aft_4h_open:>5}          {hatch_aft_4h_close:>5}
+             Open   Close
+FWD       {hatch_fwd_4h_open:>5}          {hatch_fwd_4h_close:>5}
+MID        {hatch_mid_4h_open:>5}          {hatch_mid_4h_close:>5}
+AFT        {hatch_aft_4h_open:>5}          {hatch_aft_4h_close:>5}
 _________________________
 *Idle / Delays*
 """
