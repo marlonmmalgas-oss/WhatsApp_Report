@@ -336,6 +336,7 @@ if st.button("Generate 4-Hourly Template"):
         f"AFT        {hatch_aft_4h_open:>5}      {hatch_aft_4h_close:>5}",
         "_________________________",
         "*Idle*"
+       """
     ]
 
     # Include idle entries (reuse hourly idle for now)
