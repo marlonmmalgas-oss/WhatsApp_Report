@@ -350,15 +350,15 @@ st.subheader("4-Hourly Template Preview")
 st.code(template_4hour, language="text")
 
     # --- Send to WhatsApp ---
-    if whatsapp_number:
-        wa_template_hourly = f"```{template_hourly}```"
-        wa_template_4hour = f"```{template_4hour}```"
-        if wa_choice == "Private Number":
-            wa_link_hourly = f"https://wa.me/{whatsapp_number}?text={urllib.parse.quote(wa_template_hourly)}"
-            wa_link_4hour = f"https://wa.me/{whatsapp_number}?text={urllib.parse.quote(wa_template_4hour)}"
+     if whatsapp_number:
+        wa_hourly = f"```{hourly_template}```"
+        wa_four_hour = f"```{four_hour_template}```"
+        if whatsapp_type == "Private Number":
+            wa_link_hourly = f"https://wa.me/{whatsapp_number}?text={urllib.parse.quote(wa_hourly)}"
+            wa_link_4h = f"https://wa.me/{whatsapp_number}?text={urllib.parse.quote(wa_four_hour)}"
         else:
-            wa_link_hourly = f"{whatsapp_number}?text={urllib.parse.quote(wa_template_hourly)}"
-            wa_link_4hour = f"{whatsapp_number}?text={urllib.parse.quote(wa_template_4hour)}"
+            wa_link_hourly = f"{whatsapp_number}?text={urllib.parse.quote(wa_hourly)}"
+            wa_link_4h = f"{whatsapp_number}?text={urllib.parse.quote(wa_four_hour)}"
 
         st.markdown(f"[Open Hourly WhatsApp]({wa_link_hourly})", unsafe_allow_html=True)
-        st.markdown(f"[Open 4-Hourly WhatsApp]({wa_link_4hour})", unsafe_allow_html=True)
+        st.markdown(f"[Open 4-Hourly WhatsApp]({wa_link_4h})", unsafe_allow_html=True)
