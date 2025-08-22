@@ -287,56 +287,52 @@ with st.expander("4-Hourly Moves", expanded=True):
     hatch_mid_4h_close = st.number_input("MID Hatch Close Total (4H)", min_value=0, value=hatch_mid_close, key="hatch_mid_4h_close")
     hatch_aft_4h_close = st.number_input("AFT Hatch Close Total (4H)", min_value=0, value=hatch_aft_close, key="hatch_aft_4h_close")
 
-# --- 4-Hourly WhatsApp Template ---
-st.header("Send 4-Hourly Report to WhatsApp")
-whatsapp_number_4h = st.text_input("Enter WhatsApp Number/Group for 4-Hourly Report")
+# --- WhatsApp Template for 4-Hourly Report ---
+template_4hourly = f"""\
+{vessel_name}
+Berthed {berthed_date}
 
-if st.button("Generate 4-Hourly Template"):
-    four_hour_lines = [
-        f"{vessel_name}",
-        f"Berthed {berthed_date}",
-        f"Date: {today_date}",
-        f"4-Hour Block: {selected_4hour}",
-        "_________________________",
-        "   *HOURLY MOVES*",
-        "_________________________",
-        "*Crane Moves*",
-        "           Load   Discharge",
-        f"FWD        {fwd_4h:>5}     {fwd_disch:>5}",
-        f"MID        {mid_4h:>5}     {mid_disch:>5}",
-        f"AFT        {aft_4h:>5}     {aft_disch:>5}",
-        f"POOP       {poop_4h:>5}     {poop_disch:>5}",
-        "_________________________",
-        "*Restows*",
-        "           Load   Discharge",
-        f"FWD        {fwd_restow_4h:>5}     {fwd_restow_disch:>5}",
-        f"MID        {mid_restow_4h:>5}     {mid_restow_disch:>5}",
-        f"AFT        {aft_restow_4h:>5}     {aft_restow_disch:>5}",
-        f"POOP       {poop_restow_4h:>5}     {poop_restow_disch:>5}",
-        "_________________________",
-        "      *CUMULATIVE* (from hourly saved entries)",
-        "_________________________",
-        "           Load   Disch",
-        f"Plan       {planned_load:>5}      {planned_disch:>5}",
-        f"Done       {cumulative['done_load']:>5}
-{cumulative['done_disch']:>5}",
-        f"Remain     {remaining_load:>5}      {remaining_disch:>5}",
-        "_________________________",
-        "*Restows*",
-        "           Load   Disch",
-        f"Plan       {planned_restow_load:>5}      {planned_restow_disch:>5}",
-        f"Done       {cumulative['done_restow_load']:>5}     
-{cumulative['done_restow_disch']:>5}",
-        f"Remain     {remaining_restow_load:>5}      {remaining_restow_disch:>5}",
-        "_________________________",
-        "*Hatch Moves*",
-        "           Open   Close",
-        f"FWD        {hatch_fwd_4h_open:>5}      {hatch_fwd_4h_close:>5}",
-        f"MID        {hatch_mid_4h_open:>5}      {hatch_mid_4h_close:>5}",
-        f"AFT        {hatch_aft_4h_open:>5}      {hatch_aft_4h_close:>5}",
-        "_________________________",
-        "*Idle*"
-       """
+Date: {today_date}
+4-Hour Block: {four_hour_block}
+_________________________
+   *HOURLY MOVES*
+_________________________
+*Crane Moves*
+           Load   Discharge
+FWD        {fwd_load_4h:>5}     {fwd_disch_4h:>5}
+MID        {mid_load_4h:>5}     {mid_disch_4h:>5}
+AFT        {aft_load_4h:>5}     {aft_disch_4h:>5}
+POOP       {poop_load_4h:>5}     {poop_disch_4h:>5}
+_________________________
+*Restows*
+           Load   Discharge
+FWD        {fwd_restow_load_4h:>5}     {fwd_restow_disch_4h:>5}
+MID        {mid_restow_load_4h:>5}     {mid_restow_disch_4h:>5}
+AFT        {aft_restow_load_4h:>5}     {aft_restow_disch_4h:>5}
+POOP       {poop_restow_load_4h:>5}     {poop_restow_disch_4h:>5}
+_________________________
+      *CUMULATIVE* (from hourly saved entries)
+_________________________
+           Load   Disch
+Plan       {planned_load:>5}      {planned_disch:>5}
+Done       {cumulative['done_load']:>5}      {cumulative['done_disch']:>5}
+Remain     {remaining_load_4h:>5}      {remaining_disch_4h:>5}
+_________________________
+*Restows*
+           Load   Disch
+Plan       {planned_restow_load:>5}      {planned_restow_disch:>5}
+Done       {cumulative['done_restow_load']:>5}      {cumulative['done_restow_disch']:>5}
+Remain     {remaining_restow_load_4h:>5}      {remaining_restow_disch_4h:>5}
+_________________________
+*Hatch Moves*
+           Open   Close
+FWD        {hatch_fwd_open_4h:>5}      {hatch_fwd_close_4h:>5}
+MID        {hatch_mid_open_4h:>5}      {hatch_mid_close_4h:>5}
+AFT        {hatch_aft_open_4h:>5}      {hatch_aft_close_4h:>5}
+_________________________
+*Idle*
+{idle_entries_4h}
+"""
     ]
 
     # Include idle entries (reuse hourly idle for now)
