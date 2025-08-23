@@ -1,4 +1,4 @@
-# Part 1: Imports, Setup, Vessel Info, Plan & Hourly Time
+# Part 1/5 - Imports, constants, and loading cumulative data
 import streamlit as st
 import json
 import os
@@ -7,8 +7,9 @@ from datetime import datetime, timedelta
 import pytz
 
 SAVE_FILE = "vessel_report.json"
+FOUR_HR_FILE = "vessel_4hr_report.json"
 
-# --- Initialize or load cumulative data ---
+# --- Load or initialize cumulative hourly data ---
 if os.path.exists(SAVE_FILE):
     with open(SAVE_FILE, "r") as f:
         try:
@@ -39,21 +40,41 @@ if cumulative is None:
         "opening_restow_disch": 0
     }
 
-# --- Timezone & date ---
-sa_tz = pytz.timezone("Africa/Johannesburg")
-today_date = datetime.now(sa_tz)
-formatted_date = today_date.strftime("%d/%m/%Y")
+# --- Load or initialize cumulative 4-hourly data ---
+if os.path.exists(FOUR_HR_FILE):
+    with open(FOUR_HR_FILE, "r") as f:
+        try:
+            cumulative_4h = json.load(f)
+        except json.JSONDecodeError:
+            cumulative_4h = None
+else:
+    cumulative_4h = None
 
-st.title("⛴️ Vessel Hourly & 4-Hourly Moves Tracker")
+if cumulative_4h is None:
+    cumulative_4h = {
+        "fwd_load": 0, "mid_load": 0, "aft_load": 0, "poop_load": 0,
+        "fwd_disch": 0, "mid_disch": 0, "aft_disch": 0, "poop_disch": 0,
+        "fwd_restow_load": 0, "mid_restow_load": 0, "aft_restow_load": 0, "poop_restow_load": 0,
+        "fwd_restow_disch": 0, "mid_restow_disch": 0, "aft_restow_disch": 0, "poop_restow_disch": 0,
+        "fwd_hatch_open": 0, "mid_hatch_open": 0, "aft_hatch_open": 0,
+        "fwd_hatch_close": 0, "mid_hatch_close": 0, "aft_hatch_close": 0,
+        "last_4h_block": None
+    }
+
+# --- Timezone and date ---
+sa_tz = pytz.timezone("Africa/Johannesburg")
+today_date = datetime.now(sa_tz).strftime("%d/%m/%Y")
+
+st.set_page_config(page_title="Vessel Hourly & 4-Hourly Moves Tracker", layout="wide")
+st.title("🛳 Vessel Hourly & 4-Hourly Moves Tracker")
 
 # --- Vessel Info ---
-st.header("🛳️ Vessel Info")
+st.header("Vessel Info")
 vessel_name = st.text_input("Vessel Name", cumulative["vessel_name"])
 berthed_date = st.text_input("Berthed Date", cumulative["berthed_date"])
-report_date = st.date_input("Report Date", today_date)
 
 # --- Plan & Opening Balances (Collapsible) ---
-with st.expander("📊 Plan Totals & Opening Balance (Internal Only)", expanded=False):
+with st.expander("📊 Plan Totals & Opening Balance (Internal Only)"):
     col1, col2 = st.columns(2)
     with col1:
         planned_load = st.number_input("Planned Load", value=cumulative["planned_load"])
@@ -69,262 +90,253 @@ with st.expander("📊 Plan Totals & Opening Balance (Internal Only)", expanded=
 # --- Hourly Time Dropdown (full 24h) ---
 hours_list = [f"{str(h).zfill(2)}h00 - {str((h+1)%24).zfill(2)}h00" for h in range(24)]
 default_hour = cumulative.get("last_hour", "06h00 - 07h00")
-hourly_time = st.selectbox("⏰ Select Hourly Time", options=hours_list, index=hours_list.index(default_hour))
-# Part 2: Hourly Moves Input, Restows, Hatch Moves, Idle/Delays, Tracker
+hourly_time = st.selectbox("⏱ Select Hourly Time", options=hours_list, index=hours_list.index(default_hour))
+# Part 2/5 - Hourly Moves Input & Tracker
 
-st.header(f"⚙️ Hourly Moves Input ({hourly_time})")
+st.header("📋 Hourly Moves Input")
 
-# --- Hourly Crane Moves ---
-with st.expander("🏗️ Crane Moves", expanded=True):
-    with st.expander("Load", expanded=True):
-        fwd_load = st.number_input("FWD Load", min_value=0, value=0, key="hr_fwd_load")
-        mid_load = st.number_input("MID Load", min_value=0, value=0, key="hr_mid_load")
-        aft_load = st.number_input("AFT Load", min_value=0, value=0, key="hr_aft_load")
-        poop_load = st.number_input("POOP Load", min_value=0, value=0, key="hr_poop_load")
-    with st.expander("Discharge", expanded=True):
-        fwd_disch = st.number_input("FWD Discharge", min_value=0, value=0, key="hr_fwd_disch")
-        mid_disch = st.number_input("MID Discharge", min_value=0, value=0, key="hr_mid_disch")
-        aft_disch = st.number_input("AFT Discharge", min_value=0, value=0, key="hr_aft_disch")
-        poop_disch = st.number_input("POOP Discharge", min_value=0, value=0, key="hr_poop_disch")
+with st.expander(f"🕐 Hourly Moves Input ({hourly_time})"):
+    col1, col2, col3 = st.columns(3)
 
-# --- Hourly Restows ---
-with st.expander("🔄 Restows", expanded=False):
-    with st.expander("Load", expanded=True):
-        fwd_restow_load = st.number_input("FWD Restow Load", min_value=0, value=0, key="hr_fwd_restow_load")
-        mid_restow_load = st.number_input("MID Restow Load", min_value=0, value=0, key="hr_mid_restow_load")
-        aft_restow_load = st.number_input("AFT Restow Load", min_value=0, value=0, key="hr_aft_restow_load")
-        poop_restow_load = st.number_input("POOP Restow Load", min_value=0, value=0, key="hr_poop_restow_load")
-    with st.expander("Discharge", expanded=True):
-        fwd_restow_disch = st.number_input("FWD Restow Discharge", min_value=0, value=0, key="hr_fwd_restow_disch")
-        mid_restow_disch = st.number_input("MID Restow Discharge", min_value=0, value=0, key="hr_mid_restow_disch")
-        aft_restow_disch = st.number_input("AFT Restow Discharge", min_value=0, value=0, key="hr_aft_restow_disch")
-        poop_restow_disch = st.number_input("POOP Restow Discharge", min_value=0, value=0, key="hr_poop_restow_disch")
+    with col1:
+        st.subheader("Load")
+        hr_fwd_load = st.number_input("FWD Load (hour)", min_value=0, value=cumulative.get("done_load", 0), key="hr_fwd_load")
+        hr_mid_load = st.number_input("MID Load (hour)", min_value=0, value=cumulative.get("done_load", 0), key="hr_mid_load")
+        hr_aft_load = st.number_input("AFT Load (hour)", min_value=0, value=cumulative.get("done_load", 0), key="hr_aft_load")
+        hr_poop_load = st.number_input("POOP Load (hour)", min_value=0, value=cumulative.get("done_load", 0), key="hr_poop_load")
 
-# --- Hourly Hatch Moves ---
-with st.expander("🗃️ Hatch Moves", expanded=False):
-    with st.expander("Open", expanded=True):
-        hatch_fwd_open = st.number_input("FWD Hatch Open", min_value=0, value=0, key="hr_hatch_fwd_open")
-        hatch_mid_open = st.number_input("MID Hatch Open", min_value=0, value=0, key="hr_hatch_mid_open")
-        hatch_aft_open = st.number_input("AFT Hatch Open", min_value=0, value=0, key="hr_hatch_aft_open")
-    with st.expander("Close", expanded=True):
-        hatch_fwd_close = st.number_input("FWD Hatch Close", min_value=0, value=0, key="hr_hatch_fwd_close")
-        hatch_mid_close = st.number_input("MID Hatch Close", min_value=0, value=0, key="hr_hatch_mid_close")
-        hatch_aft_close = st.number_input("AFT Hatch Close", min_value=0, value=0, key="hr_hatch_aft_close")
+    with col2:
+        st.subheader("Discharge")
+        hr_fwd_disch = st.number_input("FWD Discharge (hour)", min_value=0, value=cumulative.get("done_disch", 0), key="hr_fwd_disch")
+        hr_mid_disch = st.number_input("MID Discharge (hour)", min_value=0, value=cumulative.get("done_disch", 0), key="hr_mid_disch")
+        hr_aft_disch = st.number_input("AFT Discharge (hour)", min_value=0, value=cumulative.get("done_disch", 0), key="hr_aft_disch")
+        hr_poop_disch = st.number_input("POOP Discharge (hour)", min_value=0, value=cumulative.get("done_disch", 0), key="hr_poop_disch")
 
-# --- Idle Section ---
+    with col3:
+        st.subheader("Restow Load / Discharge & Hatch")
+        hr_fwd_restow_load = st.number_input("FWD Restow Load (hour)", min_value=0, value=cumulative.get("done_restow_load", 0), key="hr_fwd_restow_load")
+        hr_fwd_restow_disch = st.number_input("FWD Restow Disch (hour)", min_value=0, value=cumulative.get("done_restow_disch", 0), key="hr_fwd_restow_disch")
+        hr_mid_restow_load = st.number_input("MID Restow Load (hour)", min_value=0, value=cumulative.get("done_restow_load", 0), key="hr_mid_restow_load")
+        hr_mid_restow_disch = st.number_input("MID Restow Disch (hour)", min_value=0, value=cumulative.get("done_restow_disch", 0), key="hr_mid_restow_disch")
+        hr_aft_restow_load = st.number_input("AFT Restow Load (hour)", min_value=0, value=cumulative.get("done_restow_load", 0), key="hr_aft_restow_load")
+        hr_aft_restow_disch = st.number_input("AFT Restow Disch (hour)", min_value=0, value=cumulative.get("done_restow_disch", 0), key="hr_aft_restow_disch")
+        hr_poop_restow_load = st.number_input("POOP Restow Load (hour)", min_value=0, value=cumulative.get("done_restow_load", 0), key="hr_poop_restow_load")
+        hr_poop_restow_disch = st.number_input("POOP Restow Disch (hour)", min_value=0, value=cumulative.get("done_restow_disch", 0), key="hr_poop_restow_disch")
+
+        hr_fwd_hatch_open = st.number_input("FWD Hatch Open (hour)", min_value=0, value=cumulative.get("done_hatch_open", 0), key="hr_fwd_hatch_open")
+        hr_mid_hatch_open = st.number_input("MID Hatch Open (hour)", min_value=0, value=cumulative.get("done_hatch_open", 0), key="hr_mid_hatch_open")
+        hr_aft_hatch_open = st.number_input("AFT Hatch Open (hour)", min_value=0, value=cumulative.get("done_hatch_open", 0), key="hr_aft_hatch_open")
+
+        hr_fwd_hatch_close = st.number_input("FWD Hatch Close (hour)", min_value=0, value=cumulative.get("done_hatch_close", 0), key="hr_fwd_hatch_close")
+        hr_mid_hatch_close = st.number_input("MID Hatch Close (hour)", min_value=0, value=cumulative.get("done_hatch_close", 0), key="hr_mid_hatch_close")
+        hr_aft_hatch_close = st.number_input("AFT Hatch Close (hour)", min_value=0, value=cumulative.get("done_hatch_close", 0), key="hr_aft_hatch_close")
+
+# --- Hourly Tracker: Update cumulative totals ---
+cumulative.update({
+    "done_load": hr_fwd_load + hr_mid_load + hr_aft_load + hr_poop_load,
+    "done_disch": hr_fwd_disch + hr_mid_disch + hr_aft_disch + hr_poop_disch,
+    "done_restow_load": hr_fwd_restow_load + hr_mid_restow_load + hr_aft_restow_load + hr_poop_restow_load,
+    "done_restow_disch": hr_fwd_restow_disch + hr_mid_restow_disch + hr_aft_restow_disch + hr_poop_restow_disch,
+    "done_hatch_open": hr_fwd_hatch_open + hr_mid_hatch_open + hr_aft_hatch_open,
+    "done_hatch_close": hr_fwd_hatch_close + hr_mid_hatch_close + hr_aft_hatch_close,
+    "last_hour": hourly_time
+})
+
+# Save updated cumulative hourly data
+with open(SAVE_FILE, "w") as f:
+    json.dump(cumulative, f)
+    # Part 3/5 - Idle/Delays, Reset Buttons, Automatic Hour Update
+
 st.header("⏱️ Idle / Delays")
-num_idles = st.number_input("Number of Idle Entries", min_value=1, max_value=10, value=1)
+
+num_idle_entries = st.number_input("Number of Idle Entries", min_value=0, value=0, key="num_idle_entries")
+
 idle_entries = []
-idle_options = [
-    "Stevedore tea time/shift change", "Awaiting cargo", "Awaiting AGL operations",
-    "Awaiting FPT gang", "Awaiting Crane driver", "Awaiting onboard stevedores",
-    "Windbound", "Crane break down/ wipers", "Crane break down/ lights",
-    "Crane break down/ boom limit", "Crane break down", "Vessel listing",
-    "Struggling to load container", "Cell guide struggles", "Spreader difficulties"
-]
-with st.expander("📝 Idle Entries", expanded=False):
-    for i in range(num_idles):
-        st.subheader(f"Idle Entry {i+1}")
-        crane_name = st.text_input(f"Crane Name {i+1}", "")
-        start_time = st.text_input(f"Start Time {i+1}", "")
-        end_time = st.text_input(f"End Time {i+1}", "")
-        selected_delay = st.selectbox(f"Select Delay {i+1}", options=idle_options, key=f"idle_select_{i}")
-        custom_delay = st.text_input(f"Custom Delay {i+1} (optional)", "")
-        idle_entries.append({
-            "crane": crane_name,
-            "start": start_time,
-            "end": end_time,
-            "delay": custom_delay if custom_delay else selected_delay
-        })
-
-# --- Hourly Tracker Collapsible ---
-with st.expander("📈 Hourly Tracker (Total by Section)", expanded=True):
-    st.write("**Load Totals**")
-    st.write(f"FWD: {fwd_load} | MID: {mid_load} | AFT: {aft_load} | POOP: {poop_load}")
-    st.write("**Discharge Totals**")
-    st.write(f"FWD: {fwd_disch} | MID: {mid_disch} | AFT: {aft_disch} | POOP: {poop_disch}")
-    st.write("**Restow Load Totals**")
-    st.write(f"FWD: {fwd_restow_load} | MID: {mid_restow_load} | AFT: {aft_restow_load} | POOP: {poop_restow_load}")
-    st.write("**Restow Discharge Totals**")
-    st.write(f"FWD: {fwd_restow_disch} | MID: {mid_restow_disch} | AFT: {aft_restow_disch} | POOP: {poop_restow_disch}")
-    st.write("**Hatch Open Totals**")
-    st.write(f"FWD: {hatch_fwd_open} | MID: {hatch_mid_open} | AFT: {hatch_aft_open}")
-    st.write("**Hatch Close Totals**")
-    st.write(f"FWD: {hatch_fwd_close} | MID: {hatch_mid_close} | AFT: {hatch_aft_close}")
-    # Part 3: Hourly WhatsApp Template, 4-Hourly Input, Tracker, and Send
-
-st.header("📤 Hourly Report Template")
-# --- Automatic Hourly Template for WhatsApp ---
-hourly_template = f"""
-📅 Date: {report_date.strftime('%Y-%m-%d')}
-🕐 Hour: {hourly_time}
-
-🏗️ Crane Moves:
-Load - FWD: {fwd_load} | MID: {mid_load} | AFT: {aft_load} | POOP: {poop_load}
-Discharge - FWD: {fwd_disch} | MID: {mid_disch} | AFT: {aft_disch} | POOP: {poop_disch}
-
-🔄 Restows:
-Load - FWD: {fwd_restow_load} | MID: {mid_restow_load} | AFT: {aft_restow_load} | POOP: {poop_restow_load}
-Discharge - FWD: {fwd_restow_disch} | MID: {mid_restow_disch} | AFT: {aft_restow_disch} | POOP: {poop_restow_disch}
-
-🗃️ Hatch Moves:
-Open - FWD: {hatch_fwd_open} | MID: {hatch_mid_open} | AFT: {hatch_aft_open}
-Close - FWD: {hatch_fwd_close} | MID: {hatch_mid_close} | AFT: {hatch_aft_close}
-
-⏱️ Idle / Delays:
-"""
-for i, idle in enumerate(idle_entries):
-    hourly_template += f"{i+1}. {idle['crane']} | {idle['start']}-{idle['end']} | {idle['delay']}\n"
-
-st.text_area("Hourly WhatsApp Template", value=hourly_template, height=300)
-
-# --- 4-Hourly Input Section ---
-st.header("🕓 4-Hourly Moves Input")
-with st.expander("4-Hourly Crane Totals", expanded=True):
-    # Load
-    fwd_load_4h = st.number_input("FWD Load (4h)", min_value=0, value=0, key="4h_fwd_load")
-    mid_load_4h = st.number_input("MID Load (4h)", min_value=0, value=0, key="4h_mid_load")
-    aft_load_4h = st.number_input("AFT Load (4h)", min_value=0, value=0, key="4h_aft_load")
-    poop_load_4h = st.number_input("POOP Load (4h)", min_value=0, value=0, key="4h_poop_load")
-    # Discharge
-    fwd_disch_4h = st.number_input("FWD Discharge (4h)", min_value=0, value=0, key="4h_fwd_disch")
-    mid_disch_4h = st.number_input("MID Discharge (4h)", min_value=0, value=0, key="4h_mid_disch")
-    aft_disch_4h = st.number_input("AFT Discharge (4h)", min_value=0, value=0, key="4h_aft_disch")
-    poop_disch_4h = st.number_input("POOP Discharge (4h)", min_value=0, value=0, key="4h_poop_disch")
-    # Restow Load
-    fwd_restow_load_4h = st.number_input("FWD Restow Load (4h)", min_value=0, value=0, key="4h_fwd_restow_load")
-    mid_restow_load_4h = st.number_input("MID Restow Load (4h)", min_value=0, value=0, key="4h_mid_restow_load")
-    aft_restow_load_4h = st.number_input("AFT Restow Load (4h)", min_value=0, value=0, key="4h_aft_restow_load")
-    poop_restow_load_4h = st.number_input("POOP Restow Load (4h)", min_value=0, value=0, key="4h_poop_restow_load")
-    # Restow Discharge
-    fwd_restow_disch_4h = st.number_input("FWD Restow Discharge (4h)", min_value=0, value=0, key="4h_fwd_restow_disch")
-    mid_restow_disch_4h = st.number_input("MID Restow Discharge (4h)", min_value=0, value=0, key="4h_mid_restow_disch")
-    aft_restow_disch_4h = st.number_input("AFT Restow Discharge (4h)", min_value=0, value=0, key="4h_aft_restow_disch")
-    poop_restow_disch_4h = st.number_input("POOP Restow Discharge (4h)", min_value=0, value=0, key="4h_poop_restow_disch")
-    # Hatch Open / Close
-    hatch_fwd_open_4h = st.number_input("FWD Hatch Open (4h)", min_value=0, value=0, key="4h_hatch_fwd_open")
-    hatch_mid_open_4h = st.number_input("MID Hatch Open (4h)", min_value=0, value=0, key="4h_hatch_mid_open")
-    hatch_aft_open_4h = st.number_input("AFT Hatch Open (4h)", min_value=0, value=0, key="4h_hatch_aft_open")
-    hatch_fwd_close_4h = st.number_input("FWD Hatch Close (4h)", min_value=0, value=0, key="4h_hatch_fwd_close")
-    hatch_mid_close_4h = st.number_input("MID Hatch Close (4h)", min_value=0, value=0, key="4h_hatch_mid_close")
-    hatch_aft_close_4h = st.number_input("AFT Hatch Close (4h)", min_value=0, value=0, key="4h_hatch_aft_close")
-
-# --- 4-Hourly Tracker Collapsible ---
-with st.expander("📊 4-Hourly Tracker (Total Counts)", expanded=True):
-    st.write("**Load Totals (4h)**")
-    st.write(f"FWD: {fwd_load_4h} | MID: {mid_load_4h} | AFT: {aft_load_4h} | POOP: {poop_load_4h}")
-    st.write("**Discharge Totals (4h)**")
-    st.write(f"FWD: {fwd_disch_4h} | MID: {mid_disch_4h} | AFT: {aft_disch_4h} | POOP: {poop_disch_4h}")
-    st.write("**Restow Load Totals (4h)**")
-    st.write(f"FWD: {fwd_restow_load_4h} | MID: {mid_restow_load_4h} | AFT: {aft_restow_load_4h} | POOP: {poop_restow_load_4h}")
-    st.write("**Restow Discharge Totals (4h)**")
-    st.write(f"FWD: {fwd_restow_disch_4h} | MID: {mid_restow_disch_4h} | AFT: {aft_restow_disch_4h} | POOP: {poop_restow_disch_4h}")
-    st.write("**Hatch Open Totals (4h)**")
-    st.write(f"FWD: {hatch_fwd_open_4h} | MID: {hatch_mid_open_4h} | AFT: {hatch_aft_open_4h}")
-    st.write("**Hatch Close Totals (4h)**")
-    st.write(f"FWD: {hatch_fwd_close_4h} | MID: {hatch_mid_close_4h} | AFT: {hatch_aft_close_4h}")
-    # Part 4: 4-Hourly WhatsApp Template, Send, Auto-Hour, Reset
-
-st.header("📤 4-Hourly WhatsApp Template")
-
-# --- Automatic 4-Hourly WhatsApp Template ---
-four_hourly_template = f"""
-📅 Date: {report_date.strftime('%Y-%m-%d')}
-🕓 Period: {hourly_time} - {hourly_time_end_4h}
-
-🏗️ Crane Moves (4h):
-Load - FWD: {fwd_load_4h} | MID: {mid_load_4h} | AFT: {aft_load_4h} | POOP: {poop_load_4h}
-Discharge - FWD: {fwd_disch_4h} | MID: {mid_disch_4h} | AFT: {aft_disch_4h} | POOP: {poop_disch_4h}
-
-🔄 Restows (4h):
-Load - FWD: {fwd_restow_load_4h} | MID: {mid_restow_load_4h} | AFT: {aft_restow_load_4h} | POOP: {poop_restow_load_4h}
-Discharge - FWD: {fwd_restow_disch_4h} | MID: {mid_restow_disch_4h} | AFT: {aft_restow_disch_4h} | POOP: {poop_restow_disch_4h}
-
-🗃️ Hatch Moves (4h):
-Open - FWD: {hatch_fwd_open_4h} | MID: {hatch_mid_open_4h} | AFT: {hatch_aft_open_4h}
-Close - FWD: {hatch_fwd_close_4h} | MID: {hatch_mid_close_4h} | AFT: {hatch_aft_close_4h}
-
-⏱️ Idle / Delays:
-"""
-for i, idle in enumerate(idle_entries_4h):
-    four_hourly_template += f"{i+1}. {idle['crane']} | {idle['start']}-{idle['end']} | {idle['delay']}\n"
-
-st.text_area("4-Hourly WhatsApp Template", value=four_hourly_template, height=350)
-
-# --- Auto Increment Hour ---
-if "hour_index" not in st.session_state:
-    st.session_state["hour_index"] = 0
-
-hour_options = [f"{str(h).zfill(2)}h00" for h in range(24)]
-if st.button("Generate Hourly Template"):
-    st.session_state["hour_index"] += 1
-    if st.session_state["hour_index"] >= len(hour_options):
-        st.session_state["hour_index"] = 0
-    st.experimental_rerun()
-
-hourly_time = hour_options[st.session_state["hour_index"]]
-hourly_time_end_4h = hour_options[(st.session_state["hour_index"] + 4) % 24]
+for i in range(num_idle_entries):
+    entry = st.text_input(f"Idle Entry {i+1}", key=f"idle_{i}")
+    idle_entries.append(entry)
 
 # --- Reset Buttons ---
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("🔄 Reset Hourly"):
-        for section in hourly_keys:
-            st.session_state[section] = 0
-        idle_entries.clear()
+st.markdown("### 🔄 Reset Counters")
+
+col_reset_hr, col_reset_4h = st.columns(2)
+
+with col_reset_hr:
+    if st.button("Reset Hourly"):
+        # Reset all hourly counters
+        keys_to_reset = [
+            "hr_fwd_load", "hr_mid_load", "hr_aft_load", "hr_poop_load",
+            "hr_fwd_disch", "hr_mid_disch", "hr_aft_disch", "hr_poop_disch",
+            "hr_fwd_restow_load", "hr_mid_restow_load", "hr_aft_restow_load", "hr_poop_restow_load",
+            "hr_fwd_restow_disch", "hr_mid_restow_disch", "hr_aft_restow_disch", "hr_poop_restow_disch",
+            "hr_fwd_hatch_open", "hr_mid_hatch_open", "hr_aft_hatch_open",
+            "hr_fwd_hatch_close", "hr_mid_hatch_close", "hr_aft_hatch_close"
+        ]
+        for key in keys_to_reset:
+            st.session_state[key] = 0
+        st.success("✅ Hourly counters reset!")
+        # Advance to next hour automatically
+        new_hour = (datetime.strptime(hourly_time, "%Hh%M") + timedelta(hours=1)).strftime("%Hh%M")
+        st.session_state["hourly_time"] = new_hour
         st.experimental_rerun()
-with col2:
-    if st.button("🔄 Reset 4-Hourly"):
-        for section in four_hourly_keys:
-            st.session_state[section] = 0
-        idle_entries_4h.clear()
+
+with col_reset_4h:
+    if st.button("Reset 4-Hourly"):
+        keys_4h_reset = [
+            "fwd_load_4h", "mid_load_4h", "aft_load_4h", "poop_load_4h",
+            "fwd_disch_4h", "mid_disch_4h", "aft_disch_4h", "poop_disch_4h",
+            "fwd_restow_load_4h", "mid_restow_load_4h", "aft_restow_load_4h", "poop_restow_load_4h",
+            "fwd_restow_disch_4h", "mid_restow_disch_4h", "aft_restow_disch_4h", "poop_restow_disch_4h",
+            "fwd_hatch_open_4h", "mid_hatch_open_4h", "aft_hatch_open_4h",
+            "fwd_hatch_close_4h", "mid_hatch_close_4h", "aft_hatch_close_4h"
+        ]
+        for key in keys_4h_reset:
+            st.session_state[key] = 0
+        st.success("✅ 4-Hourly counters reset!")
         st.experimental_rerun()
 
-# --- Send WhatsApp Options ---
-st.header("📱 Send Reports via WhatsApp")
-whatsapp_number = st.text_input("Enter WhatsApp Number (with country code)", value="")
-group_link = st.text_input("Or enter WhatsApp Group Link (optional)", value="")
+# --- Display Hourly Tracker ---
+st.markdown("### 📊 Hourly Tracker")
+with st.expander("View Current Hourly Totals"):
+    st.write(f"Load Total: {cumulative['done_load']}")
+    st.write(f"Discharge Total: {cumulative['done_disch']}")
+    st.write(f"Restow Load Total: {cumulative['done_restow_load']}")
+    st.write(f"Restow Discharge Total: {cumulative['done_restow_disch']}")
+    st.write(f"Hatch Open Total: {cumulative['done_hatch_open']}")
+    st.write(f"Hatch Close Total: {cumulative['done_hatch_close']}")
+    # Part 4/5 - 4-Hourly Cumulative & WhatsApp Template
 
-if st.button("Send Hourly Report"):
-    st.write(f"✅ Hourly report ready to send to {whatsapp_number or group_link}")
-if st.button("Send 4-Hourly Report"):
-    st.write(f"✅ 4-Hourly report ready to send to {whatsapp_number or group_link}")
-    # Part 5: Date Picker, Session State Fixes, Footer, Collapsible Trackers
+st.header("🕓 4-Hourly Summary & WhatsApp Template")
 
-import datetime
+# Calculate 4-hourly cumulative totals
+fwd_load_4h = st.session_state.get("fwd_load_4h", 0) + st.session_state.get("hr_fwd_load", 0)
+mid_load_4h = st.session_state.get("mid_load_4h", 0) + st.session_state.get("hr_mid_load", 0)
+aft_load_4h = st.session_state.get("aft_load_4h", 0) + st.session_state.get("hr_aft_load", 0)
+poop_load_4h = st.session_state.get("poop_load_4h", 0) + st.session_state.get("hr_poop_load", 0)
 
-st.header("📅 Report Date")
-# --- Automatic Date with Picker ---
-if "report_date" not in st.session_state:
-    st.session_state["report_date"] = datetime.date.today()
+fwd_disch_4h = st.session_state.get("fwd_disch_4h", 0) + st.session_state.get("hr_fwd_disch", 0)
+mid_disch_4h = st.session_state.get("mid_disch_4h", 0) + st.session_state.get("hr_mid_disch", 0)
+aft_disch_4h = st.session_state.get("aft_disch_4h", 0) + st.session_state.get("hr_aft_disch", 0)
+poop_disch_4h = st.session_state.get("poop_disch_4h", 0) + st.session_state.get("hr_poop_disch", 0)
 
-report_date = st.date_input("Select Report Date", value=st.session_state["report_date"])
-st.session_state["report_date"] = report_date
+fwd_restow_load_4h = st.session_state.get("fwd_restow_load_4h", 0) + st.session_state.get("hr_fwd_restow_load", 0)
+mid_restow_load_4h = st.session_state.get("mid_restow_load_4h", 0) + st.session_state.get("hr_mid_restow_load", 0)
+aft_restow_load_4h = st.session_state.get("aft_restow_load_4h", 0) + st.session_state.get("hr_aft_restow_load", 0)
+poop_restow_load_4h = st.session_state.get("poop_restow_load_4h", 0) + st.session_state.get("hr_poop_restow_load", 0)
 
-# --- Collapsible Hourly Tracker ---
-with st.expander("🕑 Hourly Tracker Details"):
-    st.write("📊 Crane Moves")
-    st.write(f"Load - FWD: {st.session_state.get('hr_fwd_load',0)}, MID: {st.session_state.get('hr_mid_load',0)}, AFT: {st.session_state.get('hr_aft_load',0)}, POOP: {st.session_state.get('hr_poop_load',0)}")
-    st.write(f"Discharge - FWD: {st.session_state.get('hr_fwd_disch',0)}, MID: {st.session_state.get('hr_mid_disch',0)}, AFT: {st.session_state.get('hr_aft_disch',0)}, POOP: {st.session_state.get('hr_poop_disch',0)}")
-    st.write("🔄 Restows")
-    st.write(f"Load - FWD: {st.session_state.get('hr_fwd_restow_load',0)}, MID: {st.session_state.get('hr_mid_restow_load',0)}, AFT: {st.session_state.get('hr_aft_restow_load',0)}, POOP: {st.session_state.get('hr_poop_restow_load',0)}")
-    st.write(f"Discharge - FWD: {st.session_state.get('hr_fwd_restow_disch',0)}, MID: {st.session_state.get('hr_mid_restow_disch',0)}, AFT: {st.session_state.get('hr_aft_restow_disch',0)}, POOP: {st.session_state.get('hr_poop_restow_disch',0)}")
-    st.write("🗃️ Hatch Moves")
-    st.write(f"Open - FWD: {st.session_state.get('hr_hatch_fwd_open',0)}, MID: {st.session_state.get('hr_hatch_mid_open',0)}, AFT: {st.session_state.get('hr_hatch_aft_open',0)}")
-    st.write(f"Close - FWD: {st.session_state.get('hr_hatch_fwd_close',0)}, MID: {st.session_state.get('hr_hatch_mid_close',0)}, AFT: {st.session_state.get('hr_hatch_aft_close',0)}")
+fwd_restow_disch_4h = st.session_state.get("fwd_restow_disch_4h", 0) + st.session_state.get("hr_fwd_restow_disch", 0)
+mid_restow_disch_4h = st.session_state.get("mid_restow_disch_4h", 0) + st.session_state.get("hr_mid_restow_disch", 0)
+aft_restow_disch_4h = st.session_state.get("aft_restow_disch_4h", 0) + st.session_state.get("hr_aft_restow_disch", 0)
+poop_restow_disch_4h = st.session_state.get("poop_restow_disch_4h", 0) + st.session_state.get("hr_poop_restow_disch", 0)
+
+fwd_hatch_open_4h = st.session_state.get("fwd_hatch_open_4h", 0) + st.session_state.get("hr_fwd_hatch_open", 0)
+mid_hatch_open_4h = st.session_state.get("mid_hatch_open_4h", 0) + st.session_state.get("hr_mid_hatch_open", 0)
+aft_hatch_open_4h = st.session_state.get("aft_hatch_open_4h", 0) + st.session_state.get("hr_aft_hatch_open", 0)
+
+fwd_hatch_close_4h = st.session_state.get("fwd_hatch_close_4h", 0) + st.session_state.get("hr_fwd_hatch_close", 0)
+mid_hatch_close_4h = st.session_state.get("mid_hatch_close_4h", 0) + st.session_state.get("hr_mid_hatch_close", 0)
+aft_hatch_close_4h = st.session_state.get("aft_hatch_close_4h", 0) + st.session_state.get("hr_aft_hatch_close", 0)
+
+# Update session_state
+st.session_state.update({
+    "fwd_load_4h": fwd_load_4h, "mid_load_4h": mid_load_4h, "aft_load_4h": aft_load_4h, "poop_load_4h": poop_load_4h,
+    "fwd_disch_4h": fwd_disch_4h, "mid_disch_4h": mid_disch_4h, "aft_disch_4h": aft_disch_4h, "poop_disch_4h": poop_disch_4h,
+    "fwd_restow_load_4h": fwd_restow_load_4h, "mid_restow_load_4h": mid_restow_load_4h, "aft_restow_load_4h": aft_restow_load_4h, "poop_restow_load_4h": poop_restow_load_4h,
+    "fwd_restow_disch_4h": fwd_restow_disch_4h, "mid_restow_disch_4h": mid_restow_disch_4h, "aft_restow_disch_4h": aft_restow_disch_4h, "poop_restow_disch_4h": poop_restow_disch_4h,
+    "fwd_hatch_open_4h": fwd_hatch_open_4h, "mid_hatch_open_4h": mid_hatch_open_4h, "aft_hatch_open_4h": aft_hatch_open_4h,
+    "fwd_hatch_close_4h": fwd_hatch_close_4h, "mid_hatch_close_4h": mid_hatch_close_4h, "aft_hatch_close_4h": aft_hatch_close_4h
+})
+
+# --- WhatsApp Template Generation ---
+st.markdown("### 📱 4-Hourly WhatsApp Template")
+hourly_time_end_4h = (datetime.strptime(hourly_time, "%Hh%M") + timedelta(hours=4)).strftime("%Hh%M")
+
+whatsapp_msg_4h = f"""
+*4-Hourly Report 🕓*
+Date: {datetime.today().strftime('%Y-%m-%d')}
+Period: {hourly_time} - {hourly_time_end_4h}
+
+*LOAD*:
+FWD: {fwd_load_4h} | MID: {mid_load_4h} | AFT: {aft_load_4h} | POOP: {poop_load_4h}
+*DISCHARGE*:
+FWD: {fwd_disch_4h} | MID: {mid_disch_4h} | AFT: {aft_disch_4h} | POOP: {poop_disch_4h}
+*RESTOW LOAD*:
+FWD: {fwd_restow_load_4h} | MID: {mid_restow_load_4h} | AFT: {aft_restow_load_4h} | POOP: {poop_restow_load_4h}
+*RESTOW DISCHARGE*:
+FWD: {fwd_restow_disch_4h} | MID: {mid_restow_disch_4h} | AFT: {aft_restow_disch_4h} | POOP: {poop_restow_disch_4h}
+*HATCH COVER OPEN*:
+FWD: {fwd_hatch_open_4h} | MID: {mid_hatch_open_4h} | AFT: {aft_hatch_open_4h}
+*HATCH COVER CLOSE*:
+FWD: {fwd_hatch_close_4h} | MID: {mid_hatch_close_4h} | AFT: {aft_hatch_close_4h}
+"""
+
+st.text_area("WhatsApp 4-Hourly Message", value=whatsapp_msg_4h, height=400)
+# Part 5/5 - Send WhatsApp, Reset Buttons, Date Picker, Final Layout
+
+st.header("📤 Send Report & Reset")
+
+# --- Date Picker ---
+report_date = st.date_input("Select Report Date", datetime.today())
+report_date_str = report_date.strftime("%Y-%m-%d")
+
+# --- WhatsApp Number / Group ---
+whatsapp_number = st.text_input("Enter WhatsApp Number (with country code)", "")
+whatsapp_group = st.text_input("Or enter WhatsApp Group Link (optional)", "")
+
+# --- Send WhatsApp Functionality ---
+def send_whatsapp(msg, number=None, group=None):
+    if group:
+        st.success(f"Message ready to send to group: {group}")
+    elif number:
+        st.success(f"Message ready to send to number: {number}")
+    else:
+        st.warning("Please enter a number or group link to send message.")
+
+st.button("Send Hourly WhatsApp", on_click=lambda: send_whatsapp(whatsapp_msg_hourly, whatsapp_number, whatsapp_group))
+st.button("Send 4-Hourly WhatsApp", on_click=lambda: send_whatsapp(whatsapp_msg_4h, whatsapp_number, whatsapp_group))
+
+# --- Reset Buttons ---
+def reset_hourly():
+    keys = ["hr_fwd_load","hr_mid_load","hr_aft_load","hr_poop_load",
+            "hr_fwd_disch","hr_mid_disch","hr_aft_disch","hr_poop_disch",
+            "hr_fwd_restow_load","hr_mid_restow_load","hr_aft_restow_load","hr_poop_restow_load",
+            "hr_fwd_restow_disch","hr_mid_restow_disch","hr_aft_restow_disch","hr_poop_restow_disch",
+            "hr_fwd_hatch_open","hr_mid_hatch_open","hr_aft_hatch_open",
+            "hr_fwd_hatch_close","hr_mid_hatch_close","hr_aft_hatch_close"]
+    for k in keys:
+        st.session_state[k] = 0
+    st.success("Hourly counts reset successfully!")
+
+def reset_4hourly():
+    keys_4h = ["fwd_load_4h","mid_load_4h","aft_load_4h","poop_load_4h",
+               "fwd_disch_4h","mid_disch_4h","aft_disch_4h","poop_disch_4h",
+               "fwd_restow_load_4h","mid_restow_load_4h","aft_restow_load_4h","poop_restow_load_4h",
+               "fwd_restow_disch_4h","mid_restow_disch_4h","aft_restow_disch_4h","poop_restow_disch_4h",
+               "fwd_hatch_open_4h","mid_hatch_open_4h","aft_hatch_open_4h",
+               "fwd_hatch_close_4h","mid_hatch_close_4h","aft_hatch_close_4h"]
+    for k in keys_4h:
+        st.session_state[k] = 0
+    st.success("4-Hourly counts reset successfully!")
+
+st.button("Reset Hourly Counts", on_click=reset_hourly)
+st.button("Reset 4-Hourly Counts", on_click=reset_4hourly)
+
+# --- Auto-increment hourly time ---
+try:
+    next_hour_dt = datetime.strptime(hourly_time, "%Hh%M") + timedelta(hours=1)
+    st.session_state["hourly_time"] = next_hour_dt.strftime("%Hh%M")
+except Exception:
+    st.session_state["hourly_time"] = "08h00"  # default fallback
 
 # --- Collapsible 4-Hourly Tracker ---
-with st.expander("🕓 4-Hourly Tracker Details"):
-    st.write("📊 Crane Moves")
-    st.write(f"Load - FWD: {st.session_state.get('fwd_load_4h',0)}, MID: {st.session_state.get('mid_load_4h',0)}, AFT: {st.session_state.get('aft_load_4h',0)}, POOP: {st.session_state.get('poop_load_4h',0)}")
-    st.write(f"Discharge - FWD: {st.session_state.get('fwd_disch_4h',0)}, MID: {st.session_state.get('mid_disch_4h',0)}, AFT: {st.session_state.get('aft_disch_4h',0)}, POOP: {st.session_state.get('poop_disch_4h',0)}")
-    st.write("🔄 Restows")
-    st.write(f"Load - FWD: {st.session_state.get('fwd_restow_load_4h',0)}, MID: {st.session_state.get('mid_restow_load_4h',0)}, AFT: {st.session_state.get('aft_restow_load_4h',0)}, POOP: {st.session_state.get('poop_restow_load_4h',0)}")
-    st.write(f"Discharge - FWD: {st.session_state.get('fwd_restow_disch_4h',0)}, MID: {st.session_state.get('mid_restow_disch_4h',0)}, AFT: {st.session_state.get('aft_restow_disch_4h',0)}, POOP: {st.session_state.get('poop_restow_disch_4h',0)}")
-    st.write("🗃️ Hatch Moves")
-    st.write(f"Open - FWD: {st.session_state.get('hatch_fwd_open_4h',0)}, MID: {st.session_state.get('hatch_mid_open_4h',0)}, AFT: {st.session_state.get('hatch_aft_open_4h',0)}")
-    st.write(f"Close - FWD: {st.session_state.get('hatch_fwd_close_4h',0)}, MID: {st.session_state.get('hatch_mid_close_4h',0)}, AFT: {st.session_state.get('hatch_aft_close_4h',0)}")
+with st.expander("4-Hourly Tracker Details"):
+    st.write({
+        "LOAD": {"FWD": fwd_load_4h, "MID": mid_load_4h, "AFT": aft_load_4h, "POOP": poop_load_4h},
+        "DISCHARGE": {"FWD": fwd_disch_4h, "MID": mid_disch_4h, "AFT": aft_disch_4h, "POOP": poop_disch_4h},
+        "RESTOW LOAD": {"FWD": fwd_restow_load_4h, "MID": mid_restow_load_4h, "AFT": aft_restow_load_4h, "POOP": poop_restow_load_4h},
+        "RESTOW DISCHARGE": {"FWD": fwd_restow_disch_4h, "MID": mid_restow_disch_4h, "AFT": aft_restow_disch_4h, "POOP": poop_restow_disch_4h},
+        "HATCH OPEN": {"FWD": fwd_hatch_open_4h, "MID": mid_hatch_open_4h, "AFT": aft_hatch_open_4h},
+        "HATCH CLOSE": {"FWD": fwd_hatch_close_4h, "MID": mid_hatch_close_4h, "AFT": aft_hatch_close_4h}
+    })
 
-# --- Footer ---
-st.markdown("⚓ **Vessel Hourly & 4-Hourly Moves Tracker** – Built with Streamlit")
-st.markdown("© 2025 All rights reserved")
+st.success("App fully loaded! Hourly and 4-hourly counts are synced and ready for reporting.")
