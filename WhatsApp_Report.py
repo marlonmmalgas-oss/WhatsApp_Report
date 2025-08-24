@@ -611,7 +611,7 @@ MID       {vals4h['mid_restow_load']:>5}     {vals4h['mid_restow_disch']:>5}
 AFT       {vals4h['aft_restow_load']:>5}     {vals4h['aft_restow_disch']:>5}
 POOP      {vals4h['poop_restow_load']:>5}     {vals4h['poop_restow_disch']:>5}
 _________________________
-      *CUMULATIVE* (from hourly saved entries)
+      *CUMULATIVE* 
 _________________________
           Load   Discharge
 Plan       {st.session_state['planned_load']:>5}      {st.session_state['planned_disch']:>5}
@@ -625,8 +625,8 @@ Done       {cumulative['done_restow_load']:>5}      {cumulative['done_restow_dis
 Remain     {remaining_restow_load:>5}      {remaining_restow_disch:>5}
 _________________________
 *Hatch Moves*
-            Open     Close
-FWD  {vals4h['hatch_fwd_open']:>5}          {vals4h['hatch_fwd_close']:>5}
+           Open     Close
+FWD   {vals4h['hatch_fwd_open']:>5}          {vals4h['hatch_fwd_close']:>5}
 MID   {vals4h['hatch_mid_open']:>5}          {vals4h['hatch_mid_close']:>5}
 AFT   {vals4h['hatch_aft_open']:>5}          {vals4h['hatch_aft_close']:>5}
 _________________________
