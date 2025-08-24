@@ -598,14 +598,14 @@ _________________________
    *HOURLY MOVES*
 _________________________
 *Crane Moves*
-           Load    Discharge
+          Load    Discharge
 FWD       {vals4h['fwd_load']:>5}     {vals4h['fwd_disch']:>5}
 MID       {vals4h['mid_load']:>5}     {vals4h['mid_disch']:>5}
 AFT       {vals4h['aft_load']:>5}     {vals4h['aft_disch']:>5}
 POOP      {vals4h['poop_load']:>5}     {vals4h['poop_disch']:>5}
 _________________________
 *Restows*
-           Load    Discharge
+          Load    Discharge
 FWD       {vals4h['fwd_restow_load']:>5}     {vals4h['fwd_restow_disch']:>5}
 MID       {vals4h['mid_restow_load']:>5}     {vals4h['mid_restow_disch']:>5}
 AFT       {vals4h['aft_restow_load']:>5}     {vals4h['aft_restow_disch']:>5}
@@ -613,22 +613,22 @@ POOP      {vals4h['poop_restow_load']:>5}     {vals4h['poop_restow_disch']:>5}
 _________________________
       *CUMULATIVE* (from hourly saved entries)
 _________________________
-           Load   Discharge
+          Load   Discharge
 Plan       {st.session_state['planned_load']:>5}      {st.session_state['planned_disch']:>5}
 Done       {cumulative['done_load']:>5}      {cumulative['done_disch']:>5}
 Remain     {remaining_load:>5}      {remaining_disch:>5}
 _________________________
 *Restows*
-           Load    Discharge
+          Load    Discharge
 Plan       {st.session_state['planned_restow_load']:>5}      {st.session_state['planned_restow_disch']:>5}
 Done       {cumulative['done_restow_load']:>5}      {cumulative['done_restow_disch']:>5}
 Remain     {remaining_restow_load:>5}      {remaining_restow_disch:>5}
 _________________________
 *Hatch Moves*
-            Open        Close
-FWD    {vals4h['hatch_fwd_open']:>5}          {vals4h['hatch_fwd_close']:>5}
-MID     {vals4h['hatch_mid_open']:>5}          {vals4h['hatch_mid_close']:>5}
-AFT     {vals4h['hatch_aft_open']:>5}          {vals4h['hatch_aft_close']:>5}
+            Open     Close
+FWD  {vals4h['hatch_fwd_open']:>5}          {vals4h['hatch_fwd_close']:>5}
+MID   {vals4h['hatch_mid_open']:>5}          {vals4h['hatch_mid_close']:>5}
+AFT   {vals4h['hatch_aft_open']:>5}          {vals4h['hatch_aft_close']:>5}
 _________________________
 *Idle / Delays*
 """
