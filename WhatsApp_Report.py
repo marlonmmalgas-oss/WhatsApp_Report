@@ -282,6 +282,7 @@ with st.expander("🛡️ Hatch Moves"):
 # --------------------------
 st.subheader("⏸️ Idle / Delays")
 idle_options = [
+    "Tea Time",
     "Stevedore tea time/shift change",
     "Awaiting cargo",
     "Awaiting AGL operations",
@@ -297,6 +298,7 @@ idle_options = [
     "Struggling to load container",
     "Cell guide struggles",
     "Spreader difficulties",
+    "On stanby due to",
 ]
 with st.expander("🛑 Idle Entries", expanded=False):
     st.number_input("Number of Idle Entries", min_value=0, max_value=10, key="num_idle_entries")
