@@ -386,14 +386,14 @@ _________________________
    *HOURLY MOVES*
 _________________________
 *Crane Moves*
-            Load   Discharge
+           Load   Discharge
 FWD       {st.session_state['hr_fwd_load']:>5}     {st.session_state['hr_fwd_disch']:>5}
 MID       {st.session_state['hr_mid_load']:>5}     {st.session_state['hr_mid_disch']:>5}
 AFT       {st.session_state['hr_aft_load']:>5}     {st.session_state['hr_aft_disch']:>5}
 POOP      {st.session_state['hr_poop_load']:>5}     {st.session_state['hr_poop_disch']:>5}
 _________________________
 *Restows*
-            Load   Discharge
+           Load   Discharge
 FWD       {st.session_state['hr_fwd_restow_load']:>5}     {st.session_state['hr_fwd_restow_disch']:>5}
 MID       {st.session_state['hr_mid_restow_load']:>5}     {st.session_state['hr_mid_restow_disch']:>5}
 AFT       {st.session_state['hr_aft_restow_load']:>5}     {st.session_state['hr_aft_restow_disch']:>5}
@@ -401,13 +401,13 @@ POOP      {st.session_state['hr_poop_restow_load']:>5}     {st.session_state['hr
 _________________________
       *CUMULATIVE*
 _________________________
-            Load   Discharge
+           Load   Discharge
 Plan       {st.session_state['planned_load']:>5}      {st.session_state['planned_disch']:>5}
 Done       {cumulative['done_load']:>5}      {cumulative['done_disch']:>5}
 Remain     {remaining_load:>5}      {remaining_disch:>5}
 _________________________
 *Restows*
-            Load   Discharge
+           Load   Discharge
 Plan       {st.session_state['planned_restow_load']:>5}      {st.session_state['planned_restow_disch']:>5}
 Done       {cumulative['done_restow_load']:>5}      {cumulative['done_restow_disch']:>5}
 Remain     {remaining_restow_load:>5}      {remaining_restow_disch:>5}
