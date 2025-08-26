@@ -46,28 +46,31 @@ def init_key(key, default):
 
 # Initialize all session state variables
 def init_session_state():
+    # Get query parameters
+    query_params = st.experimental_get_query_params()
+    
     # Date & vessel info
     init_key("report_date", datetime.now(TZ).date())
-    init_key("vessel_name", "MSC NILA")
-    init_key("berthed_date", "14/08/2025 @ 10h55")
+    init_key("vessel_name", query_params.get("vessel_name", ["MSC NILA"])[0])
+    init_key("berthed_date", query_params.get("berthed_date", ["14/08/2025 @ 10h55"])[0])
     
     # Plans & openings
-    init_key("planned_load", 687)
-    init_key("planned_disch", 38)
-    init_key("planned_restow_load", 13)
-    init_key("planned_restow_disch", 13)
-    init_key("opening_load", 0)
-    init_key("opening_disch", 0)
-    init_key("opening_restow_load", 0)
-    init_key("opening_restow_disch", 0)
+    init_key("planned_load", int(query_params.get("planned_load", [687])[0]))
+    init_key("planned_disch", int(query_params.get("planned_disch", [38])[0]))
+    init_key("planned_restow_load", int(query_params.get("planned_restow_load", [13])[0]))
+    init_key("planned_restow_disch", int(query_params.get("planned_restow_disch", [13])[0]))
+    init_key("opening_load", int(query_params.get("opening_load", [0])[0]))
+    init_key("opening_disch", int(query_params.get("opening_disch", [0])[0]))
+    init_key("opening_restow_load", int(query_params.get("opening_restow_load", [0])[0]))
+    init_key("opening_restow_disch", int(query_params.get("opening_restow_disch", [0])[0]))
     
     # Cumulative totals
-    init_key("done_load", 0)
-    init_key("done_disch", 0)
-    init_key("done_restow_load", 0)
-    init_key("done_restow_disch", 0)
-    init_key("done_hatch_open", 0)
-    init_key("done_hatch_close", 0)
+    init_key("done_load", int(query_params.get("done_load", [0])[0]))
+    init_key("done_disch", int(query_params.get("done_disch", [0])[0]))
+    init_key("done_restow_load", int(query_params.get("done_restow_load", [0])[0]))
+    init_key("done_restow_disch", int(query_params.get("done_restow_disch", [0])[0]))
+    init_key("done_hatch_open", int(query_params.get("done_hatch_open", [0])[0]))
+    init_key("done_hatch_close", int(query_params.get("done_hatch_close", [0])[0]))
     
     # HOURLY inputs
     for k in [
@@ -86,7 +89,7 @@ def init_session_state():
     
     # Time selection
     hours_list = hour_range_list()
-    init_key("hourly_time", hours_list[0])
+    init_key("hourly_time", query_params.get("hourly_time", [hours_list[0]])[0])
     
     # FOUR-HOUR tracker
     init_key("fourh", empty_tracker())
@@ -172,6 +175,31 @@ def reset_4h_tracker():
     st.success("4-hour tracker has been reset!")
 
 # --------------------------
+# UPDATE QUERY PARAMS
+# --------------------------
+def update_query_params():
+    params = {
+        "vessel_name": st.session_state["vessel_name"],
+        "berthed_date": st.session_state["berthed_date"],
+        "planned_load": str(st.session_state["planned_load"]),
+        "planned_disch": str(st.session_state["planned_disch"]),
+        "planned_restow_load": str(st.session_state["planned_restow_load"]),
+        "planned_restow_disch": str(st.session_state["planned_restow_disch"]),
+        "opening_load": str(st.session_state["opening_load"]),
+        "opening_disch": str(st.session_state["opening_disch"]),
+        "opening_restow_load": str(st.session_state["opening_restow_load"]),
+        "opening_restow_disch": str(st.session_state["opening_restow_disch"]),
+        "done_load": str(st.session_state["done_load"]),
+        "done_disch": str(st.session_state["done_disch"]),
+        "done_restow_load": str(st.session_state["done_restow_load"]),
+        "done_restow_disch": str(st.session_state["done_restow_disch"]),
+        "done_hatch_open": str(st.session_state["done_hatch_open"]),
+        "done_hatch_close": str(st.session_state["done_hatch_close"]),
+        "hourly_time": st.session_state["hourly_time"],
+    }
+    st.experimental_set_query_params(**params)
+
+# --------------------------
 # UI STARTS HERE
 # --------------------------
 st.title("🚢 Vessel Hourly & 4-Hourly Moves Tracker")
@@ -184,8 +212,8 @@ st.header("Vessel Information")
 col1, col2 = st.columns([2, 1])
 with col1:
     st.subheader("Vessel Details")
-    st.text_input("Vessel Name", key="vessel_name", help="Enter the vessel name")
-    st.text_input("Berthed Date", key="berthed_date", help="Format: DD/MM/YYYY @ HHhMM")
+    st.text_input("Vessel Name", key="vessel_name", help="Enter the vessel name", on_change=update_query_params)
+    st.text_input("Berthed Date", key="berthed_date", help="Format: DD/MM/YYYY @ HHhMM", on_change=update_query_params)
 with col2:
     st.subheader("Report Date")
     st.date_input("Select Report Date", key="report_date")
@@ -197,15 +225,15 @@ with st.expander("📋 Plan Totals & Opening Balance (Internal Only)", expanded=
     st.info("These values are used for cumulative calculations and WhatsApp templates")
     c1, c2 = st.columns(2)
     with c1:
-        st.number_input("Planned Load", min_value=0, key="planned_load", help="Total planned load moves")
-        st.number_input("Planned Discharge", min_value=0, key="planned_disch", help="Total planned discharge moves")
-        st.number_input("Planned Restow Load", min_value=0, key="planned_restow_load", help="Total planned restow load moves")
-        st.number_input("Planned Restow Discharge", min_value=0, key="planned_restow_disch", help="Total planned restow discharge moves")
+        st.number_input("Planned Load", min_value=0, key="planned_load", help="Total planned load moves", on_change=update_query_params)
+        st.number_input("Planned Discharge", min_value=0, key="planned_disch", help="Total planned discharge moves", on_change=update_query_params)
+        st.number_input("Planned Restow Load", min_value=0, key="planned_restow_load", help="Total planned restow load moves", on_change=update_query_params)
+        st.number_input("Planned Restow Discharge", min_value=0, key="planned_restow_disch", help="Total planned restow discharge moves", on_change=update_query_params)
     with c2:
-        st.number_input("Opening Load (Deduction)", min_value=0, key="opening_load", help="Opening balance for load moves")
-        st.number_input("Opening Discharge (Deduction)", min_value=0, key="opening_disch", help="Opening balance for discharge moves")
-        st.number_input("Opening Restow Load (Deduction)", min_value=0, key="opening_restow_load", help="Opening balance for restow load moves")
-        st.number_input("Opening Restow Discharge (Deduction)", min_value=0, key="opening_restow_disch", help="Opening balance for restow discharge moves")
+        st.number_input("Opening Load (Deduction)", min_value=0, key="opening_load", help="Opening balance for load moves", on_change=update_query_params)
+        st.number_input("Opening Discharge (Deduction)", min_value=0, key="opening_disch", help="Opening balance for discharge moves", on_change=update_query_params)
+        st.number_input("Opening Restow Load (Deduction)", min_value=0, key="opening_restow_load", help="Opening balance for restow load moves", on_change=update_query_params)
+        st.number_input("Opening Restow Discharge (Deduction)", min_value=0, key="opening_restow_disch", help="Opening balance for restow discharge moves", on_change=update_query_params)
 
 # --------------------------
 # Hour selector
@@ -226,7 +254,8 @@ st.selectbox(
     "⏱ Select Hourly Time",
     options=hour_range_list(),
     index=hour_range_list().index(st.session_state["hourly_time"]),
-    key="hourly_time"
+    key="hourly_time",
+    on_change=update_query_params
 )
 
 st.markdown(f"### 🕐 Hourly Moves Input ({st.session_state['hourly_time']})")
@@ -345,44 +374,31 @@ def hourly_totals_split():
         "hatch_close": {"FWD": ss["hr_hatch_fwd_close"], "MID": ss["hr_hatch_mid_close"], "AFT": ss["hr_hatch_aft_close"]},
     }
 
-def hourly_totals_combined(split):
-    return {
-        "load": sum(split["load"].values()),
-        "disch": sum(split["disch"].values()),
-        "restow_load": sum(split["restow_load"].values()),
-        "restow_disch": sum(split["restow_disch"].values()),
-        "hatch_open": sum(split["hatch_open"].values()),
-        "hatch_close": sum(split["hatch_close"].values()),
-    }
-
 with st.expander("🧮 Hourly Totals (Preview)", expanded=True):
     split = hourly_totals_split()
-    comb = hourly_totals_combined(split)
     
     st.subheader("Split by Position")
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("##### Load")
+        st.markdown("##### 📦 Load Moves")
         st.write(f"FWD: {split['load']['FWD']} | MID: {split['load']['MID']} | AFT: {split['load']['AFT']} | POOP: {split['load']['POOP']}")
-        st.markdown("##### Discharge")
+        st.markdown("##### 📤 Discharge Moves")
         st.write(f"FWD: {split['disch']['FWD']} | MID: {split['disch']['MID']} | AFT: {split['disch']['AFT']} | POOP: {split['disch']['POOP']}")
     with col2:
-        st.markdown("##### Restow Load")
+        st.markdown("##### 🔄 Restow Load")
         st.write(f"FWD: {split['restow_load']['FWD']} | MID: {split['restow_load']['MID']} | AFT: {split['restow_load']['AFT']} | POOP: {split['restow_load']['POOP']}")
-        st.markdown("##### Restow Discharge")
+        st.markdown("##### 🔄 Restow Discharge")
         st.write(f"FWD: {split['restow_disch']['FWD']} | MID: {split['restow_disch']['MID']} | AFT: {split['restow_disch']['AFT']} | POOP: {split['restow_disch']['POOP']}")
     
     st.markdown("---")
-    st.subheader("Combined Totals")
+    st.subheader("Hatch Moves")
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Total Load", comb['load'])
-        st.metric("Total Discharge", comb['disch'])
-        st.metric("Total Restow Load", comb['restow_load'])
+        st.markdown("##### 🔓 Hatch Open")
+        st.write(f"FWD: {split['hatch_open']['FWD']} | MID: {split['hatch_open']['MID']} | AFT: {split['hatch_open']['AFT']}")
     with col2:
-        st.metric("Total Restow Discharge", comb['restow_disch'])
-        st.metric("Total Hatch Open", comb['hatch_open'])
-        st.metric("Total Hatch Close", comb['hatch_close'])
+        st.markdown("##### 🔒 Hatch Close")
+        st.write(f"FWD: {split['hatch_close']['FWD']} | MID: {split['hatch_close']['MID']} | AFT: {split['hatch_close']['AFT']}")
         # WhatsApp_Report.py - PART 4/5
 
 # --------------------------
@@ -451,14 +467,24 @@ def submit_hourly_report():
     
     # Update cumulative totals
     split = hourly_totals_split()
-    comb = hourly_totals_combined(split)
     
-    st.session_state["done_load"] += comb["load"]
-    st.session_state["done_disch"] += comb["disch"]
-    st.session_state["done_restow_load"] += comb["restow_load"]
-    st.session_state["done_restow_disch"] += comb["restow_disch"]
-    st.session_state["done_hatch_open"] += comb["hatch_open"]
-    st.session_state["done_hatch_close"] += comb["hatch_close"]
+    # Calculate totals from split
+    total_load = split["load"]["FWD"] + split["load"]["MID"] + split["load"]["AFT"] + split["load"]["POOP"]
+    total_disch = split["disch"]["FWD"] + split["disch"]["MID"] + split["disch"]["AFT"] + split["disch"]["POOP"]
+    total_restow_load = split["restow_load"]["FWD"] + split["restow_load"]["MID"] + split["restow_load"]["AFT"] + split["restow_load"]["POOP"]
+    total_restow_disch = split["restow_disch"]["FWD"] + split["restow_disch"]["MID"] + split["restow_disch"]["AFT"] + split["restow_disch"]["POOP"]
+    total_hatch_open = split["hatch_open"]["FWD"] + split["hatch_open"]["MID"] + split["hatch_open"]["AFT"]
+    total_hatch_close = split["hatch_close"]["FWD"] + split["hatch_close"]["MID"] + split["hatch_close"]["AFT"]
+    
+    st.session_state["done_load"] += total_load
+    st.session_state["done_disch"] += total_disch
+    st.session_state["done_restow_load"] += total_restow_load
+    st.session_state["done_restow_disch"] += total_restow_disch
+    st.session_state["done_hatch_open"] += total_hatch_open
+    st.session_state["done_hatch_close"] += total_hatch_close
+    
+    # Update query params
+    update_query_params()
     
     # Move to next hour
     next_hour = next_hour_label(st.session_state["hourly_time"])
