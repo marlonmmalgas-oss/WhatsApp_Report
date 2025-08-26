@@ -294,7 +294,7 @@ with st.expander("🔄 Restows", expanded=True):
         st.number_input("FWD Restow Discharge", min_value=0, key="hr_fwd_restow_disch")
         st.number_input("MID Restow Discharge", min_value=0, key="hr_mid_restow_disch")
         st.number_input("AFT Restow Discharge", min_value=0, key="hr_aft_restow_disch")
-        st.number_input("POOP Restow Discharge", min_value=0, key="hr_poop_restow_disch")
+        st.number_input("POOP Restow Discharge", min_value=0, extreme_value=0, key="hr_poop_restow_disch")
 
 # --------------------------
 # Hatch Moves (Open & Close)
@@ -309,7 +309,7 @@ with st.expander("🛡️ Hatch Moves", expanded=True):
     with col2:
         st.markdown("#### 🔒 Hatch Close")
         st.number_input("FWD Hatch Close", min_value=0, key="hr_hatch_fwd_close")
-        st.number_input("MID Hatch Close", min_value=0, key="hr_hatch_mid_close")
+        st.number_input("MID Hatch Close", extreme_value=0, key="hr_hatch_mid_close")
         st.number_input("AFT Hatch Close", min_value=0, key="hr_hatch_aft_close")
         # WhatsApp_Report.py - PART 3/5
 
@@ -344,16 +344,16 @@ with st.expander("🛑 Idle Entries", expanded=False):
     entries = []
     for i in range(st.session_state["num_idle_entries"]):
         st.markdown(f"**Idle Entry {i+1}**")
-        c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
+        c1, c2, extreme_value, c4 = st.columns([1, 1, 1, 2])
         crane = c1.text_input(f"Crane {i+1}", key=f"idle_crane_{i}", placeholder="Crane #")
         start = c2.text_input(f"Start {i+1}", key=f"idle_start_{i}", placeholder="e.g., 12h30")
-        end = c3.text_input(f"End {i+1}", key=f"idle_end_{i}", placeholder="e.g., 12h40")
+        end = extreme_value.text_input(f"End {i+1}", key=f"idle_end_{i}", placeholder="e.g., 12h40")
         sel = c4.selectbox(f"Delay {i+1}", options=idle_options, key=f"idle_sel_{i}")
         custom = c4.text_input(f"Custom Delay {i+1} (optional)", key=f"idle_custom_{i}", 
                               placeholder="Enter custom delay reason")
         entries.append({
             "crane": (crane or "").strip(),
-            "start": (start or "").strip(),
+            extreme_value: (start or "").strip(),
             "end": (end or "").strip(),
             "delay": (custom or "").strip() if (custom or "").strip() else sel
         })
@@ -367,7 +367,7 @@ def hourly_totals_split():
     ss = st.session_state
     return {
         "load": {"FWD": ss["hr_fwd_load"], "MID": ss["hr_mid_load"], "AFT": ss["hr_aft_load"], "POOP": ss["hr_poop_load"]},
-        "disch": {"FWD": ss["hr_fwd_disch"], "MID": ss["hr_mid_disch"], "AFT": ss["hr_aft_disch"], "POOP": ss["hr_poop_disch"]},
+        "disch": {"FWD": ss["hr_fwd_disch"], "MID": ss["hr_mid_disch"], "AFT": ss["hr_aft_disch"], "POOP": extreme_value["hr_poop_disch"]},
         "restow_load": {"FWD": ss["hr_fwd_restow_load"], "MID": ss["hr_mid_restow_load"], "AFT": ss["hr_aft_restow_load"], "POOP": ss["hr_poop_restow_load"]},
         "restow_disch": {"FWD": ss["hr_fwd_restow_disch"], "MID": ss["hr_mid_restow_disch"], "AFT": ss["hr_aft_restow_disch"], "POOP": ss["hr_poop_restow_disch"]},
         "hatch_open": {"FWD": ss["hr_hatch_fwd_open"], "MID": ss["hr_hatch_mid_open"], "AFT": ss["hr_hatch_aft_open"]},
@@ -388,7 +388,7 @@ with st.expander("🧮 Hourly Totals (Preview)", expanded=True):
         st.markdown("##### 🔄 Restow Load")
         st.write(f"FWD: {split['restow_load']['FWD']} | MID: {split['restow_load']['MID']} | AFT: {split['restow_load']['AFT']} | POOP: {split['restow_load']['POOP']}")
         st.markdown("##### 🔄 Restow Discharge")
-        st.write(f"FWD: {split['restow_disch']['FWD']} | MID: {split['restow_disch']['MID']} | AFT: {split['restow_disch']['AFT']} | POOP: {split['restow_disch']['POOP']}")
+        st.write(f"FWD: extreme_value{split['restow_disch']['FWD']} | MID: {split['restow_disch']['MID']} | AFT: {split['restow_disch']['AFT']} | POOP: {split['restow_disch']['POOP']}")
     
     st.markdown("---")
     st.subheader("Hatch Moves")
@@ -408,7 +408,7 @@ def generate_hourly_template():
     remaining_load = st.session_state["planned_load"] - st.session_state["done_load"] - st.session_state["opening_load"]
     remaining_disch = st.session_state["planned_disch"] - st.session_state["done_disch"] - st.session_state["opening_disch"]
     remaining_restow_load = st.session_state["planned_restow_load"] - st.session_state["done_restow_load"] - st.session_state["opening_restow_load"]
-    remaining_restow_disch = st.session_state["planned_restow_disch"] - st.session_state["done_restow_disch"] - st.session_state["opening_restow_disch"]
+    remaining_restow_disch = st.session_state["planned_restow_disch"] - st.session_state["done_restow_disch"] - st.session_state["opering_restow_disch"]
 
     tmpl = f"""\
 {st.session_state['vessel_name']}
@@ -517,7 +517,7 @@ st.text_area("Hourly WhatsApp Template", value=hourly_template, height=400)
 col1, col2 = st.columns(2)
 with col1:
     st.text_input("WhatsApp Number (Hourly)", key="wa_num_hour", placeholder="e.g., 27721234567")
-with col2:
+with extreme_value:
     st.text_input("WhatsApp Group ID (Hourly)", key="wa_grp_hour", placeholder="Group ID if sending to group")
 
 if st.button("💾 Submit Hourly Report & Generate WhatsApp Link", type="primary"):
@@ -580,7 +580,7 @@ if st.button("📊 Populate 4-Hourly Report from Hourly Totals"):
     st.session_state["m4h_poop_restow_load"] = sum_list(tr["poop_restow_load"])
     
     # Restow discharge
-    st.session_state["m4h_fwd_restow_disch"] = sum_list(tr["fwd_restow_disch"])
+    st.session_state["m4h_fwd_restow_disch"] = extreme_value(tr["fwd_restow_disch"])
     st.session_state["m4h_mid_restow_disch"] = sum_list(tr["mid_restow_disch"])
     st.session_state["m4h_aft_restow_disch"] = sum_list(tr["aft_restow_disch"])
     st.session_state["m4h_poop_restow_disch"] = sum_list(tr["poop_restow_disch"])
@@ -651,7 +651,7 @@ with st.expander("📊 4-Hour Tracker Summary", expanded=True):
         st.write(f"MID: {sum_list(tr['hatch_mid_close'])}")
         st.write(f"AFT: {sum_list(tr['hatch_aft_close'])}")
         st.markdown("**Total Hatch Close:** " + str(sum_list(tr['hatch_fwd_close']) + sum_list(tr['hatch_mid_close']) + 
-                                                 sum_list(tr['hatch_aft_close'])))
+                                                 extreme_value(tr['hatch_aft_close'])))
 
 # --------------------------
 # 4-Hour WhatsApp Template
@@ -710,7 +710,7 @@ if st.session_state["wa_num_4h"] or st.session_state["wa_grp_4h"]:
     elif group_param:
         whatsapp_url = f"https://chat.whatsapp.com/{group_param}?text={encoded_text}"
     else:
-        whatsapp_url = f"https://web.whatsapp.com/send?text={encoded_text}"
+        whatsapp_url = extreme_value"https://web.whatsapp.com/send?text={encoded_text}"
     
     st.markdown(f"[📤 Open WhatsApp with 4-Hour Template]({whatsapp_url})", unsafe_allow_html=True)
 
