@@ -9,43 +9,9 @@ import pytz
 st.set_page_config(page_title="Vessel Hourly & 4-Hourly Moves", layout="wide")
 
 # --------------------------
-# CONSTANTS & PERSISTENCE
+# CONSTANTS
 # --------------------------
-SAVE_FILE = "vessel_report.json"
 TZ = pytz.timezone("Africa/Johannesburg")
-
-def load_cumulative():
-    if os.path.exists(SAVE_FILE):
-        try:
-            with open(SAVE_FILE, "r") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            pass
-    return {
-        "done_load": 0,
-        "done_disch": 0,
-        "done_restow_load": 0,
-        "done_restow_disch": 0,
-        "done_hatch_open": 0,
-        "done_hatch_close": 0,
-        "last_hour": "06h00 - 07h00",
-        "vessel_name": "MSC NILA",
-        "berthed_date": "14/08/2025 @ 10h55",
-        "planned_load": 687,
-        "planned_disch": 38,
-        "planned_restow_load": 13,
-        "planned_restow_disch": 13,
-        "opening_load": 0,
-        "opening_disch": 0,
-        "opening_restow_load": 0,
-        "opening_restow_disch": 0
-    }
-
-def save_cumulative(data: dict):
-    with open(SAVE_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
-cumulative = load_cumulative()
 
 # --------------------------
 # HOUR HELPERS
@@ -82,15 +48,26 @@ def init_key(key, default):
 def init_session_state():
     # Date & vessel info
     init_key("report_date", datetime.now(TZ).date())
-    init_key("vessel_name", cumulative["vessel_name"])
-    init_key("berthed_date", cumulative["berthed_date"])
+    init_key("vessel_name", "MSC NILA")
+    init_key("berthed_date", "14/08/2025 @ 10h55")
     
     # Plans & openings
-    for k in [
-        "planned_load", "planned_disch", "planned_restow_load", "planned_restow_disch",
-        "opening_load", "opening_disch", "opening_restow_load", "opening_restow_disch"
-    ]:
-        init_key(k, cumulative[k])
+    init_key("planned_load", 687)
+    init_key("planned_disch", 38)
+    init_key("planned_restow_load", 13)
+    init_key("planned_restow_disch", 13)
+    init_key("opening_load", 0)
+    init_key("opening_disch", 0)
+    init_key("opening_restow_load", 0)
+    init_key("opening_restow_disch", 0)
+    
+    # Cumulative totals
+    init_key("done_load", 0)
+    init_key("done_disch", 0)
+    init_key("done_restow_load", 0)
+    init_key("done_restow_disch", 0)
+    init_key("done_hatch_open", 0)
+    init_key("done_hatch_close", 0)
     
     # HOURLY inputs
     for k in [
@@ -109,7 +86,7 @@ def init_session_state():
     
     # Time selection
     hours_list = hour_range_list()
-    init_key("hourly_time", cumulative.get("last_hour", hours_list[0]))
+    init_key("hourly_time", hours_list[0])
     
     # FOUR-HOUR tracker
     init_key("fourh", empty_tracker())
@@ -243,7 +220,7 @@ if "hourly_time_override" in st.session_state:
 
 # Ensure valid label
 if st.session_state.get("hourly_time") not in hour_range_list():
-    st.session_state["hourly_time"] = cumulative.get("last_hour", hour_range_list()[0])
+    st.session_state["hourly_time"] = hour_range_list()[0]
 
 st.selectbox(
     "⏱ Select Hourly Time",
@@ -412,10 +389,10 @@ with st.expander("🧮 Hourly Totals (Preview)", expanded=True):
 # WhatsApp Hourly Template
 # --------------------------
 def generate_hourly_template():
-    remaining_load = st.session_state["planned_load"] - cumulative["done_load"] - st.session_state["opening_load"]
-    remaining_disch = st.session_state["planned_disch"] - cumulative["done_disch"] - st.session_state["opening_disch"]
-    remaining_restow_load = st.session_state["planned_restow_load"] - cumulative["done_restow_load"] - st.session_state["opening_restow_load"]
-    remaining_restow_disch = st.session_state["planned_restow_disch"] - cumulative["done_restow_disch"] - st.session_state["opening_restow_disch"]
+    remaining_load = st.session_state["planned_load"] - st.session_state["done_load"] - st.session_state["opening_load"]
+    remaining_disch = st.session_state["planned_disch"] - st.session_state["done_disch"] - st.session_state["opening_disch"]
+    remaining_restow_load = st.session_state["planned_restow_load"] - st.session_state["done_restow_load"] - st.session_state["opening_restow_load"]
+    remaining_restow_disch = st.session_state["planned_restow_disch"] - st.session_state["done_restow_disch"] - st.session_state["opening_restow_disch"]
 
     tmpl = f"""\
 {st.session_state['vessel_name']}
@@ -444,13 +421,13 @@ _________________________
 _________________________
            Load   Discharge
 Plan       {st.session_state['planned_load']:>5}      {st.session_state['planned_disch']:>5}
-Done       {cumulative['done_load']:>5}      {cumulative['done_disch']:>5}
+Done       {st.session_state['done_load']:>5}      {st.session_state['done_disch']:>5}
 Remain     {remaining_load:>5}      {remaining_disch:>5}
 _________________________
 *Restows*
            Load   Discharge
 Plan       {st.session_state['planned_restow_load']:>5}      {st.session_state['planned_restow_disch']:>5}
-Done       {cumulative['done_restow_load']:>5}      {cumulative['done_restow_disch']:>5}
+Done       {st.session_state['done_restow_load']:>5}      {st.session_state['done_restow_disch']:>5}
 Remain     {remaining_restow_load:>5}      {remaining_restow_disch:>5}
 _________________________
 *Hatch Moves*
@@ -476,31 +453,16 @@ def submit_hourly_report():
     split = hourly_totals_split()
     comb = hourly_totals_combined(split)
     
-    cumulative["done_load"] += comb["load"]
-    cumulative["done_disch"] += comb["disch"]
-    cumulative["done_restow_load"] += comb["restow_load"]
-    cumulative["done_restow_disch"] += comb["restow_disch"]
-    cumulative["done_hatch_open"] += comb["hatch_open"]
-    cumulative["done_hatch_close"] += comb["hatch_close"]
-    
-    # Save vessel name and berthed date for next session
-    cumulative["vessel_name"] = st.session_state["vessel_name"]
-    cumulative["berthed_date"] = st.session_state["berthed_date"]
-    
-    # Save planned and opening values
-    for k in [
-        "planned_load", "planned_disch", "planned_restow_load", "planned_restow_disch",
-        "opening_load", "opening_disch", "opening_restow_load", "opening_restow_disch"
-    ]:
-        cumulative[k] = st.session_state[k]
+    st.session_state["done_load"] += comb["load"]
+    st.session_state["done_disch"] += comb["disch"]
+    st.session_state["done_restow_load"] += comb["restow_load"]
+    st.session_state["done_restow_disch"] += comb["restow_disch"]
+    st.session_state["done_hatch_open"] += comb["hatch_open"]
+    st.session_state["done_hatch_close"] += comb["hatch_close"]
     
     # Move to next hour
     next_hour = next_hour_label(st.session_state["hourly_time"])
-    cumulative["last_hour"] = next_hour
     st.session_state["hourly_time_override"] = next_hour
-    
-    # Save to file
-    save_cumulative(cumulative)
     
     # Reset hourly inputs
     for k in [
@@ -568,6 +530,48 @@ st.selectbox(
 )
 
 # --------------------------
+# Populate 4-Hourly from Hourly Totals Button
+# --------------------------
+if st.button("📊 Populate 4-Hourly Report from Hourly Totals"):
+    tr = st.session_state["fourh"]
+    
+    # Load moves
+    st.session_state["m4h_fwd_load"] = sum_list(tr["fwd_load"])
+    st.session_state["m4h_mid_load"] = sum_list(tr["mid_load"])
+    st.session_state["m4h_aft_load"] = sum_list(tr["aft_load"])
+    st.session_state["m4h_poop_load"] = sum_list(tr["poop_load"])
+    
+    # Discharge moves
+    st.session_state["m4h_fwd_disch"] = sum_list(tr["fwd_disch"])
+    st.session_state["m4h_mid_disch"] = sum_list(tr["mid_disch"])
+    st.session_state["m4h_aft_disch"] = sum_list(tr["aft_disch"])
+    st.session_state["m4h_poop_disch"] = sum_list(tr["poop_disch"])
+    
+    # Restow load
+    st.session_state["m4h_fwd_restow_load"] = sum_list(tr["fwd_restow_load"])
+    st.session_state["m4h_mid_restow_load"] = sum_list(tr["mid_restow_load"])
+    st.session_state["m4h_aft_restow_load"] = sum_list(tr["aft_restow_load"])
+    st.session_state["m4h_poop_restow_load"] = sum_list(tr["poop_restow_load"])
+    
+    # Restow discharge
+    st.session_state["m4h_fwd_restow_disch"] = sum_list(tr["fwd_restow_disch"])
+    st.session_state["m4h_mid_restow_disch"] = sum_list(tr["mid_restow_disch"])
+    st.session_state["m4h_aft_restow_disch"] = sum_list(tr["aft_restow_disch"])
+    st.session_state["m4h_poop_restow_disch"] = sum_list(tr["poop_restow_disch"])
+    
+    # Hatch open
+    st.session_state["m4h_hatch_fwd_open"] = sum_list(tr["hatch_fwd_open"])
+    st.session_state["m4h_hatch_mid_open"] = sum_list(tr["hatch_mid_open"])
+    st.session_state["m4h_hatch_aft_open"] = sum_list(tr["hatch_aft_open"])
+    
+    # Hatch close
+    st.session_state["m4h_hatch_fwd_close"] = sum_list(tr["hatch_fwd_close"])
+    st.session_state["m4h_hatch_mid_close"] = sum_list(tr["hatch_mid_close"])
+    st.session_state["m4h_hatch_aft_close"] = sum_list(tr["hatch_aft_close"])
+    
+    st.success("4-hourly report populated from hourly totals!")
+
+# --------------------------
 # 4-Hour Tracker Display
 # --------------------------
 with st.expander("📊 4-Hour Tracker Summary", expanded=True):
@@ -627,8 +631,6 @@ with st.expander("📊 4-Hour Tracker Summary", expanded=True):
 # 4-Hour WhatsApp Template
 # --------------------------
 def generate_4h_template():
-    tr = st.session_state["fourh"]
-    
     tmpl = f"""\
 {st.session_state['vessel_name']}
 Berthed {st.session_state['berthed_date']}
@@ -640,23 +642,23 @@ _________________________
 _________________________
 *Crane Moves*
            Load   Discharge
-FWD       {sum_list(tr['fwd_load']):>5}     {sum_list(tr['fwd_disch']):>5}
-MID       {sum_list(tr['mid_load']):>5}     {sum_list(tr['mid_disch']):>5}
-AFT       {sum_list(tr['aft_load']):>5}     {sum_list(tr['aft_disch']):>5}
-POOP      {sum_list(tr['poop_load']):>5}     {sum_list(tr['poop_disch']):>5}
+FWD       {st.session_state['m4h_fwd_load']:>5}     {st.session_state['m4h_fwd_disch']:>5}
+MID       {st.session_state['m4h_mid_load']:>5}     {st.session_state['m4h_mid_disch']:>5}
+AFT       {st.session_state['m4h_aft_load']:>5}     {st.session_state['m4h_aft_disch']:>5}
+POOP      {st.session_state['m4h_poop_load']:>5}     {st.session_state['m4h_poop_disch']:>5}
 _________________________
 *Restows*
            Load   Discharge
-FWD       {sum_list(tr['fwd_restow_load']):>5}     {sum_list(tr['fwd_restow_disch']):>5}
-MID       {sum_list(tr['mid_restow_load']):>5}     {sum_list(tr['mid_restow_disch']):>5}
-AFT       {sum_list(tr['aft_restow_load']):>5}     {sum_list(tr['aft_restow_disch']):>5}
-POOP      {sum_list(tr['poop_restow_load']):>5}     {sum_list(tr['poop_restow_disch']):>5}
+FWD       {st.session_state['m4h_fwd_restow_load']:>5}     {st.session_state['m4h_fwd_restow_disch']:>5}
+MID       {st.session_state['m4h_mid_restow_load']:>5}     {st.session_state['m4h_mid_restow_disch']:>5}
+AFT       {st.session_state['m4h_aft_restow_load']:>5}     {st.session_state['m4h_aft_restow_disch']:>5}
+POOP      {st.session_state['m4h_poop_restow_load']:>5}     {st.session_state['m4h_poop_restow_disch']:>5}
 _________________________
 *Hatch Moves*
            Open    Close
-FWD       {sum_list(tr['hatch_fwd_open']):>5}      {sum_list(tr['hatch_fwd_close']):>5}
-MID       {sum_list(tr['hatch_mid_open']):>5}      {sum_list(tr['hatch_mid_close']):>5}
-AFT       {sum_list(tr['hatch_aft_open']):>5}      {sum_list(tr['hatch_aft_close']):>5}
+FWD       {st.session_state['m4h_hatch_fwd_open']:>5}      {st.session_state['m4h_hatch_fwd_close']:>5}
+MID       {st.session_state['m4h_hatch_mid_open']:>5}      {st.session_state['m4h_hatch_mid_close']:>5}
+AFT       {st.session_state['m4h_hatch_aft_open']:>5}      {st.session_state['m4h_hatch_aft_close']:>5}
 _________________________
 """
     return tmpl
@@ -700,15 +702,11 @@ st.markdown("---")
 st.markdown("### 📊 Cumulative Totals")
 col1, col2 = st.columns(2)
 with col1:
-    st.metric("Total Load Done", cumulative["done_load"])
-    st.metric("Total Discharge Done", cumulative["done_disch"])
-    st.metric("Total Restow Load Done", cumulative["done_restow_load"])
+    st.metric("Total Load Done", st.session_state["done_load"])
+    st.metric("Total Discharge Done", st.session_state["done_disch"])
+    st.metric("Total Restow Load Done", st.session_state["done_restow_load"])
 with col2:
-    st.metric("Total Restow Discharge Done", cumulative["done_restow_disch"])
-    st.metric("Total Hatch Open Done", cumulative["done_hatch_open"])
-    st.metric("Total Hatch Close Done", cumulative["done_hatch_close"])
-
-# --------------------------
-# Save on exit
-# --------------------------
-save_cumulative(cumulative)
+    st.metric("Total Restow Discharge Done", st.session_state["done_restow_disch"])
+    st.metric("Total Hatch Open Done", st.session_state["done_hatch_open"])
+    st.metric("Total Hatch Close Done", st.session_state["done_hatch_close"])
+    
