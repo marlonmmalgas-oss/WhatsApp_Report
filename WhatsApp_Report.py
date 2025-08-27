@@ -504,7 +504,162 @@ def reset_hourly_inputs():
     st.session_state["hourly_time_override"] = next_hour_label(st.session_state["hourly_time"])
 
 st.button("🔄 Reset Hourly Inputs (and advance hour)", on_click=reset_hourly_inputs)
-# WhatsApp_Report.py  — PART 5 / 5
+# WhatsApp_Report.py  — PART 4 / 5
+
+st.markdown("---")
+st.header("📊 4-Hourly Tracker & Report")
+
+# pick 4-hour block label safely
+block_opts = four_hour_blocks()
+if st.session_state["fourh_block"] not in block_opts:
+    st.session_state["fourh_block"] = block_opts[0]
+st.selectbox("Select 4-Hour Block", options=block_opts,
+             index=block_opts.index(st.session_state["fourh_block"]),
+             key="fourh_block")
+
+def computed_4h():
+    tr = st.session_state["fourh"]
+    return {
+        "fwd_load": sum_list(tr["fwd_load"]), "mid_load": sum_list(tr["mid_load"]), "aft_load": sum_list(tr["aft_load"]), "poop_load": sum_list(tr["poop_load"]),
+        "fwd_disch": sum_list(tr["fwd_disch"]), "mid_disch": sum_list(tr["mid_disch"]), "aft_disch": sum_list(tr["aft_disch"]), "poop_disch": sum_list(tr["poop_disch"]),
+        "fwd_restow_load": sum_list(tr["fwd_restow_load"]), "mid_restow_load": sum_list(tr["mid_restow_load"]), "aft_restow_load": sum_list(tr["aft_restow_load"]), "poop_restow_load": sum_list(tr["poop_restow_load"]),
+        "fwd_restow_disch": sum_list(tr["fwd_restow_disch"]), "mid_restow_disch": sum_list(tr["mid_restow_disch"]), "aft_restow_disch": sum_list(tr["aft_restow_disch"]), "poop_restow_disch": sum_list(tr["poop_restow_disch"]),
+        "hatch_fwd_open": sum_list(tr["hatch_fwd_open"]), "hatch_mid_open": sum_list(tr["hatch_mid_open"]), "hatch_aft_open": sum_list(tr["hatch_aft_open"]),
+        "hatch_fwd_close": sum_list(tr["hatch_fwd_close"]), "hatch_mid_close": sum_list(tr["hatch_mid_close"]), "hatch_aft_close": sum_list(tr["hatch_aft_close"]),
+    }
+
+def manual_4h():
+    ss = st.session_state
+    return {
+        "fwd_load": ss["m4h_fwd_load"], "mid_load": ss["m4h_mid_load"], "aft_load": ss["m4h_aft_load"], "poop_load": ss["m4h_poop_load"],
+        "fwd_disch": ss["m4h_fwd_disch"], "mid_disch": ss["m4h_mid_disch"], "aft_disch": ss["m4h_aft_disch"], "poop_disch": ss["m4h_poop_disch"],
+        "fwd_restow_load": ss["m4h_fwd_restow_load"], "mid_restow_load": ss["m4h_mid_restow_load"], "aft_restow_load": ss["m4h_aft_restow_load"], "poop_restow_load": ss["m4h_poop_restow_load"],
+        "fwd_restow_disch": ss["m4h_fwd_restow_disch"], "mid_restow_disch": ss["m4h_mid_restow_disch"], "aft_restow_disch": ss["m4h_aft_restow_disch"], "poop_restow_disch": ss["m4h_poop_restow_disch"],
+        "hatch_fwd_open": ss["m4h_hatch_fwd_open"], "hatch_mid_open": ss["m4h_hatch_mid_open"], "hatch_aft_open": ss["m4h_hatch_aft_open"],
+        "hatch_fwd_close": ss["m4h_hatch_fwd_close"], "hatch_mid_close": ss["m4h_hatch_mid_close"], "hatch_aft_close": ss["m4h_hatch_aft_close"],
+    }
+
+with st.expander("🧮 4-Hour Totals (auto-calculated)"):
+    calc = computed_4h()
+    st.write(f"**Crane Moves – Load:** FWD {calc['fwd_load']} | MID {calc['mid_load']} | AFT {calc['aft_load']} | POOP {calc['poop_load']}")
+    st.write(f"**Crane Moves – Discharge:** FWD {calc['fwd_disch']} | MID {calc['mid_disch']} | AFT {calc['aft_disch']} | POOP {calc['poop_disch']}")
+    st.write(f"**Restows – Load:** FWD {calc['fwd_restow_load']} | MID {calc['mid_restow_load']} | AFT {calc['aft_restow_load']} | POOP {calc['poop_restow_load']}")
+    st.write(f"**Restows – Discharge:** FWD {calc['fwd_restow_disch']} | MID {calc['mid_restow_disch']} | AFT {calc['aft_restow_disch']} | POOP {calc['poop_restow_disch']}")
+    st.write(f"**Hatch Open:** FWD {calc['hatch_fwd_open']} | MID {calc['hatch_mid_open']} | AFT {calc['hatch_aft_open']}")
+    st.write(f"**Hatch Close:** FWD {calc['hatch_fwd_close']} | MID {calc['hatch_mid_close']} | AFT {calc['hatch_aft_close']}")
+
+with st.expander("✏️ Manual Override 4-Hour Totals", expanded=False):
+    st.checkbox("Use manual totals instead of auto-calculated", key="fourh_manual_override")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.number_input("FWD Load 4H", min_value=0, key="m4h_fwd_load")
+        st.number_input("FWD Disch 4H", min_value=0, key="m4h_fwd_disch")
+        st.number_input("FWD Rst Load 4H", min_value=0, key="m4h_fwd_restow_load")
+        st.number_input("FWD Rst Disch 4H", min_value=0, key="m4h_fwd_restow_disch")
+        st.number_input("FWD Hatch Open 4H", min_value=0, key="m4h_hatch_fwd_open")
+        st.number_input("FWD Hatch Close 4H", min_value=0, key="m4h_hatch_fwd_close")
+    with c2:
+        st.number_input("MID Load 4H", min_value=0, key="m4h_mid_load")
+        st.number_input("MID Disch 4H", min_value=0, key="m4h_mid_disch")
+        st.number_input("MID Rst Load 4H", min_value=0, key="m4h_mid_restow_load")
+        st.number_input("MID Rst Disch 4H", min_value=0, key="m4h_mid_restow_disch")
+        st.number_input("MID Hatch Open 4H", min_value=0, key="m4h_hatch_mid_open")
+        st.number_input("MID Hatch Close 4H", min_value=0, key="m4h_hatch_mid_close")
+    with c3:
+        st.number_input("AFT Load 4H", min_value=0, key="m4h_aft_load")
+        st.number_input("AFT Disch 4H", min_value=0, key="m4h_aft_disch")
+        st.number_input("AFT Rst Load 4H", min_value=0, key="m4h_aft_restow_load")
+        st.number_input("AFT Rst Disch 4H", min_value=0, key="m4h_aft_restow_disch")
+        st.number_input("AFT Hatch Open 4H", min_value=0, key="m4h_hatch_aft_open")
+        st.number_input("AFT Hatch Close 4H", min_value=0, key="m4h_hatch_aft_close")
+    with c4:
+        st.number_input("POOP Load 4H", min_value=0, key="m4h_poop_load")
+        st.number_input("POOP Disch 4H", min_value=0, key="m4h_poop_disch")
+        st.number_input("POOP Rst Load 4H", min_value=0, key="m4h_poop_restow_load")
+        st.number_input("POOP Rst Disch 4H", min_value=0, key="m4h_poop_restow_disch")
+
+vals4h = manual_4h() if st.session_state["fourh_manual_override"] else computed_4h()
+
+def generate_4h_template():
+    remaining_load  = st.session_state["planned_load"]  - cumulative["done_load"]  - st.session_state["opening_load"]
+    remaining_disch = st.session_state["planned_disch"] - cumulative["done_disch"] - st.session_state["opening_disch"]
+    remaining_restow_load  = st.session_state["planned_restow_load"]  - cumulative["done_restow_load"]  - st.session_state["opening_restow_load"]
+    remaining_restow_disch = st.session_state["planned_restow_disch"] - cumulative["done_restow_disch"] - st.session_state["opening_restow_disch"]
+
+    t = f"""\
+{st.session_state['vessel_name']}
+Berthed {st.session_state['berthed_date']}
+
+Date: {st.session_state['report_date'].strftime('%d/%m/%Y')}
+4-Hour Block: {st.session_state['fourh_block']}
+_________________________
+   *HOURLY MOVES*
+_________________________
+*Crane Moves*
+           Load    Discharge
+FWD       {vals4h['fwd_load']:>5}     {vals4h['fwd_disch']:>5}
+MID       {vals4h['mid_load']:>5}     {vals4h['mid_disch']:>5}
+AFT       {vals4h['aft_load']:>5}     {vals4h['aft_disch']:>5}
+POOP      {vals4h['poop_load']:>5}     {vals4h['poop_disch']:>5}
+_________________________
+*Restows*
+           Load    Discharge
+FWD       {vals4h['fwd_restow_load']:>5}     {vals4h['fwd_restow_disch']:>5}
+MID       {vals4h['mid_restow_load']:>5}     {vals4h['mid_restow_disch']:>5}
+AFT       {vals4h['aft_restow_load']:>5}     {vals4h['aft_restow_disch']:>5}
+POOP      {vals4h['poop_restow_load']:>5}     {vals4h['poop_restow_disch']:>5}
+_________________________
+      *CUMULATIVE* (from hourly saved entries)
+_________________________
+           Load   Disch
+Plan       {st.session_state['planned_load']:>5}      {st.session_state['planned_disch']:>5}
+Done       {cumulative['done_load']:>5}      {cumulative['done_disch']:>5}
+Remain     {remaining_load:>5}      {remaining_disch:>5}
+_________________________
+*Restows*
+           Load    Disch
+Plan       {st.session_state['planned_restow_load']:>5}      {st.session_state['planned_restow_disch']:>5}
+Done       {cumulative['done_restow_load']:>5}      {cumulative['done_restow_disch']:>5}
+Remain     {remaining_restow_load:>5}      {remaining_restow_disch:>5}
+_________________________
+*Hatch Moves*
+             Open         Close
+FWD          {vals4h['hatch_fwd_open']:>5}          {vals4h['hatch_fwd_close']:>5}
+MID          {vals4h['hatch_mid_open']:>5}          {vals4h['hatch_mid_close']:>5}
+AFT          {vals4h['hatch_aft_open']:>5}          {vals4h['hatch_aft_close']:>5}
+_________________________
+*Idle / Delays*
+"""
+    for i, idle in enumerate(st.session_state["idle_entries"]):
+        t += f"{i+1}. {idle['crane']} {idle['start']}-{idle['end']} : {idle['delay']}\n"
+    return t
+
+st.code(generate_4h_template(), language="text")
+
+st.subheader("📱 Send 4-Hourly Report to WhatsApp")
+st.text_input("Enter WhatsApp Number for 4H report (optional)", key="wa_num_4h")
+st.text_input("Or enter WhatsApp Group Link for 4H report (optional)", key="wa_grp_4h")
+
+cA, cB, cC = st.columns([1,1,1])
+with cA:
+    if st.button("👁️ Preview 4-Hourly Template Only"):
+        st.code(generate_4h_template(), language="text")
+with cB:
+    if st.button("📤 Open WhatsApp (4-Hourly)"):
+        t = generate_4h_template()
+        wa_text = f"```{t}```"
+        if st.session_state.get("wa_num_4h"):
+            link = f"https://wa.me/{st.session_state['wa_num_4h']}?text={urllib.parse.quote(wa_text)}"
+            st.markdown(f"[Open WhatsApp]({link})", unsafe_allow_html=True)
+        elif st.session_state.get("wa_grp_4h"):
+            st.markdown(f"[Open WhatsApp Group]({st.session_state['wa_grp_4h']})", unsafe_allow_html=True)
+        else:
+            st.info("Enter a WhatsApp number or group link to send.")
+with cC:
+    if st.button("🔄 Reset 4-Hourly Tracker (clear last 4 hours)"):
+        reset_4h_tracker()
+        st.success("4-hourly tracker reset.")
+        # WhatsApp_Report.py  — PART 5 / 5
 
 st.markdown("---")
 st.caption(
