@@ -757,4 +757,4 @@ st.caption(
     "• 4-Hourly: Use **Populate 4-Hourly from Hourly Tracker** if you want to copy auto-calculated totals into manual 4H inputs. "
     "• Resets do not loop; they just clear values. "
     "• Hour advances automatically after generating hourly or when you reset hourly inputs."
-    )
+        )
