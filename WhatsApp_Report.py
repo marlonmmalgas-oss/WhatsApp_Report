@@ -844,4 +844,4 @@ st.caption(
     "• Gearbox moves are hourly-only and shown on hourly template. "
     "• Resets do not loop; they just clear values. "
     "• Hour advances automatically after generating hourly or when you reset hourly inputs."
-        )
+    )
