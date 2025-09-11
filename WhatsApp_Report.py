@@ -440,16 +440,31 @@ _________________________
 # --------------------------
 def on_generate_hourly_callback():
     global cumulative
-    # First ensure openings applied once (opening balances count as done)
+
+    # --- ensure all hr keys exist before usage ---
+    hr_keys_defaults = {
+        "hr_fwd_load": 0, "hr_mid_load": 0, "hr_aft_load": 0, "hr_poop_load": 0,
+        "hr_fwd_disch": 0, "hr_mid_disch": 0, "hr_aft_disch": 0, "hr_poop_disch": 0,
+        "hr_fwd_restow_load": 0, "hr_mid_restow_load": 0, "hr_aft_restow_load": 0, "hr_poop_restow_load": 0,
+        "hr_fwd_restow_disch": 0, "hr_mid_restow_disch": 0, "hr_aft_restow_disch": 0, "hr_poop_restow_disch": 0,
+        "hr_hatch_fwd_open": 0, "hr_hatch_mid_open": 0, "hr_hatch_aft_open": 0,
+        "hr_hatch_fwd_close": 0, "hr_hatch_mid_close": 0, "hr_hatch_aft_close": 0,
+        "hr_gearbox": 0
+    }
+    for k, v in hr_keys_defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+    # ------------------------------------------------
+
+    # First ensure openings applied once
     if not cumulative.get("_openings_applied", False):
         cumulative["done_load"] += int(st.session_state.get("opening_load", 0))
         cumulative["done_disch"] += int(st.session_state.get("opening_disch", 0))
         cumulative["done_restow_load"] += int(st.session_state.get("opening_restow_load", 0))
         cumulative["done_restow_disch"] += int(st.session_state.get("opening_restow_disch", 0))
-        # we don't have per-position openings, so they get added to total only (keeps original behaviour)
         cumulative["_openings_applied"] = True
 
-    # compute hour values
+    # now safe to build hr dictionary
     hr = {
         "fwd_load": int(st.session_state["hr_fwd_load"]),
         "mid_load": int(st.session_state["hr_mid_load"]),
