@@ -934,3 +934,15 @@ st.caption(
     "• Resets: Hourly reset clears only the hourly inputs. 4-hourly reset clears the 4-hour tracker. Master reset clears everything (DB + session). "
     "• Opening balances are applied once (on first Generate) so they appear as Done and reduce Remain. "
         )
+# Ensure all cumulative keys exist with default values
+required_keys = [
+    "done_load","done_disch","done_restow_load","done_restow_disch",
+    "done_hatch_open","done_hatch_close","done_gearbox",
+    "planned_load","planned_disch","planned_restow_load","planned_restow_disch",
+    "opening_load","opening_disch","opening_restow_load","opening_restow_disch",
+    "vessel_name","berthed_date","first_lift","last_lift"
+]
+
+for k in required_keys:
+    if k not in cumulative:
+        cumulative[k] = 0 if "done" in k or "planned" in k or "opening" in k else ""
