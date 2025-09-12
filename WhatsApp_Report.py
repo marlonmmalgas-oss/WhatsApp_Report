@@ -1,29 +1,32 @@
-# WhatsApp_Report.py  — PART 1 / 5
+# PART 1/5
 import streamlit as st
+import sqlite3
 import json
 import os
-import sqlite3
 import urllib.parse
 from datetime import datetime, timedelta
 import pytz
+from typing import Dict, Any
 
-# Page config
+# Page
 st.set_page_config(page_title="Vessel Hourly & 4-Hourly Moves", layout="wide")
 
 # --------------------------
-# CONSTANTS & PERSISTENCE
+# CONSTANTS & PERSISTENCE (SQLite)
 # --------------------------
-SAVE_DB = "vessel_report.db"
+DB_FILE = "vessel_report.db"
+SAVE_FILE = "vessel_report.json"  # kept for compatibility/backups if needed
 TZ = pytz.timezone("Africa/Johannesburg")
 
-# Default cumulative/settings
-DEFAULT_CUMULATIVE = {
+# Keys we expect to always exist in cumulative/meta
+REQUIRED_KEYS = {
     "done_load": 0,
     "done_disch": 0,
     "done_restow_load": 0,
     "done_restow_disch": 0,
     "done_hatch_open": 0,
     "done_hatch_close": 0,
+    "done_gearbox": 0,     # one-off hourly gearbox count (not cumulative)
     "last_hour": "06h00 - 07h00",
     "vessel_name": "MSC NILA",
     "berthed_date": "14/08/2025 @ 10h55",
@@ -35,107 +38,81 @@ DEFAULT_CUMULATIVE = {
     "opening_disch": 0,
     "opening_restow_load": 0,
     "opening_restow_disch": 0,
-    "first_lift": "",
-    "last_lift": ""
+    "first_lift": "",      # optional
+    "last_lift": "",       # optional
+    "_openings_applied": False  # internal flag to prevent double-applying openings
 }
 
-# --------------------------
-# DB helpers
-# --------------------------
-def get_conn():
-    return sqlite3.connect(SAVE_DB, isolation_level=None, check_same_thread=False)
+def connect_db():
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def init_db():
-    conn = get_conn()
+    """Create tables if not present and ensure meta row exists."""
+    conn = connect_db()
     cur = conn.cursor()
-    # meta table stores cumulative json
     cur.execute("""
         CREATE TABLE IF NOT EXISTS meta (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
+            id INTEGER PRIMARY KEY,
             json TEXT NOT NULL
         );
     """)
-    # settings table for individual keys (easier if you want query params later)
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        );
-    """)
-    # fourh table (rolling hours details): store each hour entry as JSON with timestamp
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS fourh_entries (
+        CREATE TABLE IF NOT EXISTS hourly_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             hour_label TEXT,
-            json TEXT,
+            data_json TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
-    # Ensure meta row exists
-    cur.execute("SELECT json FROM meta WHERE id = 1;")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS fourh_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            block_label TEXT,
+            data_json TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+    # ensure meta row id=1 exists
+    cur.execute("SELECT json FROM meta WHERE id=1;")
     row = cur.fetchone()
     if row is None:
-        cur.execute("INSERT INTO meta (id, json) VALUES (1, ?);", (json.dumps(DEFAULT_CUMULATIVE),))
-    conn.commit()
+        # insert default cumulative (REQUIRED_KEYS with defaults)
+        base = dict(REQUIRED_KEYS)
+        cur.execute("INSERT INTO meta (id, json) VALUES (1, ?);", (json.dumps(base),))
+        conn.commit()
     conn.close()
 
-def load_cumulative_from_db():
-    conn = get_conn()
+def load_db_meta() -> Dict[str, Any]:
+    conn = connect_db()
     cur = conn.cursor()
-    cur.execute("SELECT json FROM meta WHERE id = 1;")
+    cur.execute("SELECT json FROM meta WHERE id=1;")
     row = cur.fetchone()
     conn.close()
     if row:
         try:
-            return json.loads(row[0])
+            data = json.loads(row["json"])
         except Exception:
-            return DEFAULT_CUMULATIVE.copy()
-    return DEFAULT_CUMULATIVE.copy()
+            data = dict(REQUIRED_KEYS)
+    else:
+        data = dict(REQUIRED_KEYS)
+    # ensure required keys present
+    for k, v in REQUIRED_KEYS.items():
+        if k not in data:
+            data[k] = v
+    return data
 
-def save_cumulative_to_db(cum: dict):
-    conn = get_conn()
+def save_db_meta(meta: Dict[str, Any]):
+    conn = connect_db()
     cur = conn.cursor()
-    cur.execute("UPDATE meta SET json = ? WHERE id = 1;", (json.dumps(cum),))
+    cur.execute("UPDATE meta SET json = ? WHERE id = 1;", (json.dumps(meta),))
     conn.commit()
     conn.close()
 
-def save_setting(key: str, value: str):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value;", (key, str(value)))
-    conn.commit()
-    conn.close()
-
-def load_settings_from_db():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT key, value FROM settings;")
-    rows = cur.fetchall()
-    conn.close()
-    return {k:v for k,v in rows}
-
-def append_fourh_entry(hour_label: str, data: dict):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("INSERT INTO fourh_entries (hour_label, json) VALUES (?, ?);", (hour_label, json.dumps(data)))
-    # Keep only last 24 entries for safety (optional)
-    cur.execute("DELETE FROM fourh_entries WHERE id NOT IN (SELECT id FROM fourh_entries ORDER BY id DESC LIMIT 100);")
-    conn.commit()
-    conn.close()
-
-def get_last_fourh_entries(n=4):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT hour_label, json FROM fourh_entries ORDER BY id DESC LIMIT ?;", (n,))
-    rows = cur.fetchall()
-    conn.close()
-    # return newest first -> reverse to chronological
-    return list(reversed([(r[0], json.loads(r[1])) for r in rows]))
-
-# Initialize DB
+# Initialize DB and load cumulative/meta
 init_db()
-cumulative = load_cumulative_from_db()
-db_settings = load_settings_from_db()
+cumulative = load_db_meta()
 
 # --------------------------
 # HOUR HELPERS
@@ -152,6 +129,7 @@ def next_hour_label(current_label: str):
     return hours[(idx + 1) % len(hours)]
 
 def four_hour_blocks():
+    # keep same blocks as original script
     return [
         "06h00 - 10h00",
         "10h00 - 14h00",
@@ -162,36 +140,39 @@ def four_hour_blocks():
     ]
 
 # --------------------------
-# SESSION STATE INIT (safe)
+# SESSION STATE INIT
 # --------------------------
-def init_key(key, default):
+def init_key(key: str, default):
     if key not in st.session_state:
         st.session_state[key] = default
 
-# date & labels - persist across sessions using DB values if present
+# date & labels (persisted meta fields should initialize session)
 init_key("report_date", datetime.now(TZ).date())
-init_key("vessel_name", db_settings.get("vessel_name", cumulative.get("vessel_name", DEFAULT_CUMULATIVE["vessel_name"])))
-init_key("berthed_date", db_settings.get("berthed_date", cumulative.get("berthed_date", DEFAULT_CUMULATIVE["berthed_date"])))
-init_key("first_lift", db_settings.get("first_lift", cumulative.get("first_lift", "")))
-init_key("last_lift", db_settings.get("last_lift", cumulative.get("last_lift", "")))
+# NOTE: do not set widget values by assigning widget return to session_state
+# instead supply key=... to widgets later so Streamlit persists them.
+init_key("vessel_name", cumulative.get("vessel_name", REQUIRED_KEYS["vessel_name"]))
+init_key("berthed_date", cumulative.get("berthed_date", REQUIRED_KEYS["berthed_date"]))
+init_key("first_lift", cumulative.get("first_lift", ""))
+init_key("last_lift", cumulative.get("last_lift", ""))
 
-# plans & openings (from db/meta, editable in UI)
+# plans & openings (from DB meta; widgets will use these keys)
 for k in [
     "planned_load","planned_disch","planned_restow_load","planned_restow_disch",
     "opening_load","opening_disch","opening_restow_load","opening_restow_disch"
 ]:
-    init_key(k, int(db_settings.get(k, cumulative.get(k, DEFAULT_CUMULATIVE.get(k,0)))))
+    init_key(k, cumulative.get(k, REQUIRED_KEYS.get(k, 0)))
 
-# HOURLY inputs
-for k in [
+# HOURLY inputs (per-hour numeric widgets)
+hourly_keys = [
     "hr_fwd_load","hr_mid_load","hr_aft_load","hr_poop_load",
     "hr_fwd_disch","hr_mid_disch","hr_aft_disch","hr_poop_disch",
     "hr_fwd_restow_load","hr_mid_restow_load","hr_aft_restow_load","hr_poop_restow_load",
     "hr_fwd_restow_disch","hr_mid_restow_disch","hr_aft_restow_disch","hr_poop_restow_disch",
     "hr_hatch_fwd_open","hr_hatch_mid_open","hr_hatch_aft_open",
     "hr_hatch_fwd_close","hr_hatch_mid_close","hr_hatch_aft_close",
-    "hour_gearbox_total"
-]:
+    "hr_gearbox"  # hourly gearbox count (one-off; not cumulative)
+]
+for k in hourly_keys:
     init_key(k, 0)
 
 # idle entries
@@ -201,8 +182,10 @@ init_key("idle_entries", [])
 # time selection (hourly)
 hours_list = hour_range_list()
 init_key("hourly_time", cumulative.get("last_hour", hours_list[0]))
+# safe override mechanism for auto-advancing hour without writing to widgets during render
+init_key("hourly_time_override", None)
 
-# FOUR-HOUR tracker (lists roll up to 4 most recent generated hours) kept in session to avoid DB reads too much
+# FOUR-HOUR tracker (lists roll up to 4 most recent generated hours) stored in session
 def empty_tracker():
     return {
         "fwd_load": [], "mid_load": [], "aft_load": [], "poop_load": [],
@@ -211,217 +194,200 @@ def empty_tracker():
         "fwd_restow_disch": [], "mid_restow_disch": [], "aft_restow_disch": [], "poop_restow_disch": [],
         "hatch_fwd_open": [], "hatch_mid_open": [], "hatch_aft_open": [],
         "hatch_fwd_close": [], "hatch_mid_close": [], "hatch_aft_close": [],
-        "count_hours": 0,
+        "gearbox": [],  # hourly gearbox entries for last 4 hours (not cumulative)
+        "count_hours": 0
     }
 
 init_key("fourh", empty_tracker())
 init_key("fourh_manual_override", False)
 
-# manual 4H fields
-for k in [
+# manual 4h fields (editable when manual override enabled)
+manual_4h_keys = [
     "m4h_fwd_load","m4h_mid_load","m4h_aft_load","m4h_poop_load",
     "m4h_fwd_disch","m4h_mid_disch","m4h_aft_disch","m4h_poop_disch",
     "m4h_fwd_restow_load","m4h_mid_restow_load","m4h_aft_restow_load","m4h_poop_restow_load",
     "m4h_fwd_restow_disch","m4h_mid_restow_disch","m4h_aft_restow_disch","m4h_poop_restow_disch",
     "m4h_hatch_fwd_open","m4h_hatch_mid_open","m4h_hatch_aft_open",
     "m4h_hatch_fwd_close","m4h_hatch_mid_close","m4h_hatch_aft_close",
-]:
+    "m4h_gearbox"
+]
+for k in manual_4h_keys:
     init_key(k, 0)
 
 init_key("fourh_block", four_hour_blocks()[0])
-# WhatsApp_Report.py  — PART 2 / 5
-
-st.title("Vessel Hourly & 4-Hourly Moves Tracker")
 
 # --------------------------
-# Date & Vessel
+# SMALL HELPERS
 # --------------------------
-left, right = st.columns([2,1])
-with left:
-    st.subheader("🚢 Vessel Info")
-    # Use keys only (do not assign widget output to session_state)
-    st.text_input("Vessel Name", key="vessel_name", value=st.session_state["vessel_name"])
-    st.text_input("Berthed Date", key="berthed_date", value=st.session_state["berthed_date"])
-    st.text_input("First Lift", key="first_lift", value=st.session_state["first_lift"])
-    st.text_input("Last Lift", key="last_lift", value=st.session_state["last_lift"])
-    # Save settings to DB whenever changed (use small callback)
-    def save_basic_settings():
-        save_setting("vessel_name", st.session_state["vessel_name"])
-        save_setting("berthed_date", st.session_state["berthed_date"])
-        save_setting("first_lift", st.session_state["first_lift"])
-        save_setting("last_lift", st.session_state["last_lift"])
-        # also reflect to cumulative meta
-        cumulative.update({
-            "vessel_name": st.session_state["vessel_name"],
-            "berthed_date": st.session_state["berthed_date"],
-            "first_lift": st.session_state["first_lift"],
-            "last_lift": st.session_state["last_lift"]
-        })
-        save_cumulative_to_db(cumulative)
-    # Wire save callback to inputs using form or on_change: we'll attach to a hidden button to call manually
-with right:
-    st.subheader("📅 Report Date")
-    st.date_input("Select Report Date", key="report_date", value=st.session_state["report_date"])
+def sum_list(lst):
+    return int(sum(lst)) if lst else 0
 
-# Provide a small save button to persist settings (avoids writing on every keystroke)
-st.button("💾 Save Vessel & Lift Settings", on_click=save_basic_settings)
+def add_current_hour_to_4h():
+    """Take the current hourly widget values and append them into the rolling 4h tracker lists.
+    Keep only last 4 items for each list."""
+    tr = st.session_state["fourh"]
+    # append hourly splits (as integers)
+    tr["fwd_load"].append(int(st.session_state.get("hr_fwd_load", 0)))
+    tr["mid_load"].append(int(st.session_state.get("hr_mid_load", 0)))
+    tr["aft_load"].append(int(st.session_state.get("hr_aft_load", 0)))
+    tr["poop_load"].append(int(st.session_state.get("hr_poop_load", 0)))
 
-# --------------------------
-# Plan Totals & Opening Balance
-# --------------------------
-with st.expander("📋 Plan Totals & Opening Balance (Internal Only)", expanded=False):
-    c1, c2 = st.columns(2)
+    tr["fwd_disch"].append(int(st.session_state.get("hr_fwd_disch", 0)))
+    tr["mid_disch"].append(int(st.session_state.get("hr_mid_disch", 0)))
+    tr["aft_disch"].append(int(st.session_state.get("hr_aft_disch", 0)))
+    tr["poop_disch"].append(int(st.session_state.get("hr_poop_disch", 0)))
+
+    tr["fwd_restow_load"].append(int(st.session_state.get("hr_fwd_restow_load", 0)))
+    tr["mid_restow_load"].append(int(st.session_state.get("hr_mid_restow_load", 0)))
+    tr["aft_restow_load"].append(int(st.session_state.get("hr_aft_restow_load", 0)))
+    tr["poop_restow_load"].append(int(st.session_state.get("hr_poop_restow_load", 0)))
+
+    tr["fwd_restow_disch"].append(int(st.session_state.get("hr_fwd_restow_disch", 0)))
+    tr["mid_restow_disch"].append(int(st.session_state.get("hr_mid_restow_disch", 0)))
+    tr["aft_restow_disch"].append(int(st.session_state.get("hr_aft_restow_disch", 0)))
+    tr["poop_restow_disch"].append(int(st.session_state.get("hr_poop_restow_disch", 0)))
+
+    tr["hatch_fwd_open"].append(int(st.session_state.get("hr_hatch_fwd_open", 0)))
+    tr["hatch_mid_open"].append(int(st.session_state.get("hr_hatch_mid_open", 0)))
+    tr["hatch_aft_open"].append(int(st.session_state.get("hr_hatch_aft_open", 0)))
+
+    tr["hatch_fwd_close"].append(int(st.session_state.get("hr_hatch_fwd_close", 0)))
+    tr["hatch_mid_close"].append(int(st.session_state.get("hr_hatch_mid_close", 0)))
+    tr["hatch_aft_close"].append(int(st.session_state.get("hr_hatch_aft_close", 0)))
+
+    # gearbox (hourly one-off)
+    tr["gearbox"].append(int(st.session_state.get("hr_gearbox", 0)))
+
+    # keep only last 4 entries for each list
+    for k in list(tr.keys()):
+        if isinstance(tr[k], list):
+            tr[k] = tr[k][-4:]
+    tr["count_hours"] = min(4, tr["count_hours"] + 1)
+
+def reset_4h_tracker():
+    st.session_state["fourh"] = empty_tracker()
+    # clear manual override fields too
+    for k in manual_4h_keys:
+        st.session_state[k] = 0
+    st.session_state["fourh_manual_override"] = False
+
+# End of PART 1
+# PART 2/5
+
+st.header("⚓ Vessel Info & Planning")
+
+with st.expander("📝 Vessel & Berth Details", expanded=True):
+    st.text_input("Vessel Name", key="vessel_name")
+    st.text_input("Berthed Date/Time", key="berthed_date")
+    st.text_input("First Lift (optional)", key="first_lift")
+    st.text_input("Last Lift (optional)", key="last_lift")
+    st.date_input("Report Date", value=st.session_state["report_date"], key="report_date")
+
+with st.expander("📊 Planned & Opening Balances", expanded=True):
+    c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.number_input("Planned Load",  min_value=0, key="planned_load", value=st.session_state["planned_load"])
-        st.number_input("Planned Discharge", min_value=0, key="planned_disch", value=st.session_state["planned_disch"])
-        st.number_input("Planned Restow Load",  min_value=0, key="planned_restow_load", value=st.session_state["planned_restow_load"])
-        st.number_input("Planned Restow Discharge", min_value=0, key="planned_restow_disch", value=st.session_state["planned_restow_disch"])
+        st.number_input("Planned Load", min_value=0, key="planned_load")
+        st.number_input("Opening Load", min_value=0, key="opening_load")
     with c2:
-        st.number_input("Opening Load (Deduction)",  min_value=0, key="opening_load", value=st.session_state["opening_load"])
-        st.number_input("Opening Discharge (Deduction)", min_value=0, key="opening_disch", value=st.session_state["opening_disch"])
-        st.number_input("Opening Restow Load (Deduction)",  min_value=0, key="opening_restow_load", value=st.session_state["opening_restow_load"])
-        st.number_input("Opening Restow Discharge (Deduction)", min_value=0, key="opening_restow_disch", value=st.session_state["opening_restow_disch"])
+        st.number_input("Planned Discharge", min_value=0, key="planned_disch")
+        st.number_input("Opening Discharge", min_value=0, key="opening_disch")
+    with c3:
+        st.number_input("Planned Restow Load", min_value=0, key="planned_restow_load")
+        st.number_input("Opening Restow Load", min_value=0, key="opening_restow_load")
+    with c4:
+        st.number_input("Planned Restow Disch", min_value=0, key="planned_restow_disch")
+        st.number_input("Opening Restow Disch", min_value=0, key="opening_restow_disch")
 
-    # Save plan/opening immediately button
-    def save_plan_openings():
-        keys = ["planned_load","planned_disch","planned_restow_load","planned_restow_disch",
-                "opening_load","opening_disch","opening_restow_load","opening_restow_disch"]
-        for kk in keys:
-            save_setting(kk, st.session_state[kk])
-            cumulative[kk] = int(st.session_state[kk])
-        save_cumulative_to_db(cumulative)
-        st.success("Plan totals & openings saved.")
-    st.button("💾 Save Plan & Opening Balances", on_click=save_plan_openings)
+st.markdown("---")
+st.header("⏱️ Hourly Inputs")
 
-# --------------------------
-# Hour selector (24h) with safe override handoff
-# --------------------------
-# Apply pending hour change from previous action BEFORE rendering the selectbox
-if "hourly_time_override" in st.session_state:
+# Hour selector
+hours_list = hour_range_list()
+if st.session_state.get("hourly_time_override"):
+    # apply safe override once
     st.session_state["hourly_time"] = st.session_state["hourly_time_override"]
-    del st.session_state["hourly_time_override"]
+    st.session_state["hourly_time_override"] = None
 
-# Ensure valid label
-if st.session_state.get("hourly_time") not in hour_range_list():
-    st.session_state["hourly_time"] = cumulative.get("last_hour", hour_range_list()[0])
+st.selectbox("Select Hour", options=hours_list,
+             index=hours_list.index(st.session_state["hourly_time"]),
+             key="hourly_time")
 
-st.selectbox(
-    "⏱ Select Hourly Time",
-    options=hour_range_list(),
-    index=hour_range_list().index(st.session_state["hourly_time"]),
-    key="hourly_time"
-)
+# HOURLY INPUTS grouped into collapsibles
+with st.expander("🟦 Crane Moves"):
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.number_input("Load FWD", min_value=0, key="hr_fwd_load")
+        st.number_input("Discharge FWD", min_value=0, key="hr_fwd_disch")
+    with c2:
+        st.number_input("Load MID", min_value=0, key="hr_mid_load")
+        st.number_input("Discharge MID", min_value=0, key="hr_mid_disch")
+    with c3:
+        st.number_input("Load AFT", min_value=0, key="hr_aft_load")
+        st.number_input("Discharge AFT", min_value=0, key="hr_aft_disch")
+    with c4:
+        st.number_input("Load POOP", min_value=0, key="hr_poop_load")
+        st.number_input("Discharge POOP", min_value=0, key="hr_poop_disch")
 
-st.markdown(f"### 🕐 Hourly Moves Input ({st.session_state['hourly_time']})")
-# WhatsApp_Report.py  — PART 3 / 5
+with st.expander("🟩 Restows"):
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.number_input("Restow Load FWD", min_value=0, key="hr_fwd_restow_load")
+        st.number_input("Restow Disch FWD", min_value=0, key="hr_fwd_restow_disch")
+    with c2:
+        st.number_input("Restow Load MID", min_value=0, key="hr_mid_restow_load")
+        st.number_input("Restow Disch MID", min_value=0, key="hr_mid_restow_disch")
+    with c3:
+        st.number_input("Restow Load AFT", min_value=0, key="hr_aft_restow_load")
+        st.number_input("Restow Disch AFT", min_value=0, key="hr_aft_restow_disch")
+    with c4:
+        st.number_input("Restow Load POOP", min_value=0, key="hr_poop_restow_load")
+        st.number_input("Restow Disch POOP", min_value=0, key="hr_poop_restow_disch")
 
-# --------------------------
-# Crane Moves (Load & Discharge) — keep collapsibles exactly as you had
-# --------------------------
-with st.expander("🏗️ Crane Moves"):
-    with st.expander("📦 Load"):
-        st.number_input("FWD Load", min_value=0, key="hr_fwd_load", value=st.session_state["hr_fwd_load"])
-        st.number_input("MID Load", min_value=0, key="hr_mid_load", value=st.session_state["hr_mid_load"])
-        st.number_input("AFT Load", min_value=0, key="hr_aft_load", value=st.session_state["hr_aft_load"])
-        st.number_input("POOP Load", min_value=0, key="hr_poop_load", value=st.session_state["hr_poop_load"])
-    with st.expander("📤 Discharge"):
-        st.number_input("FWD Discharge", min_value=0, key="hr_fwd_disch", value=st.session_state["hr_fwd_disch"])
-        st.number_input("MID Discharge", min_value=0, key="hr_mid_disch", value=st.session_state["hr_mid_disch"])
-        st.number_input("AFT Discharge", min_value=0, key="hr_aft_disch", value=st.session_state["hr_aft_disch"])
-        st.number_input("POOP Discharge", min_value=0, key="hr_poop_disch", value=st.session_state["hr_poop_disch"])
+with st.expander("🟨 Hatch Moves"):
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.number_input("Hatch FWD Open", min_value=0, key="hr_hatch_fwd_open")
+        st.number_input("Hatch FWD Close", min_value=0, key="hr_hatch_fwd_close")
+    with c2:
+        st.number_input("Hatch MID Open", min_value=0, key="hr_hatch_mid_open")
+        st.number_input("Hatch MID Close", min_value=0, key="hr_hatch_mid_close")
+    with c3:
+        st.number_input("Hatch AFT Open", min_value=0, key="hr_hatch_aft_open")
+        st.number_input("Hatch AFT Close", min_value=0, key="hr_hatch_aft_close")
 
-# --------------------------
-# Restows (Load & Discharge)
-# --------------------------
-with st.expander("🔄 Restows"):
-    with st.expander("📦 Load"):
-        st.number_input("FWD Restow Load", min_value=0, key="hr_fwd_restow_load", value=st.session_state["hr_fwd_restow_load"])
-        st.number_input("MID Restow Load", min_value=0, key="hr_mid_restow_load", value=st.session_state["hr_mid_restow_load"])
-        st.number_input("AFT Restow Load", min_value=0, key="hr_aft_restow_load", value=st.session_state["hr_aft_restow_load"])
-        st.number_input("POOP Restow Load", min_value=0, key="hr_poop_restow_load", value=st.session_state["hr_poop_restow_load"])
-    with st.expander("📤 Discharge"):
-        st.number_input("FWD Restow Discharge", min_value=0, key="hr_fwd_restow_disch", value=st.session_state["hr_fwd_restow_disch"])
-        st.number_input("MID Restow Discharge", min_value=0, key="hr_mid_restow_disch", value=st.session_state["hr_mid_restow_disch"])
-        st.number_input("AFT Restow Discharge", min_value=0, key="hr_aft_restow_disch", value=st.session_state["hr_aft_restow_disch"])
-        st.number_input("POOP Restow Discharge", min_value=0, key="hr_poop_restow_disch", value=st.session_state["hr_poop_restow_disch"])
+with st.expander("🟥 Gearbox Moves"):
+    st.number_input("Total Gearboxes (this hour only)", min_value=0, key="hr_gearbox")
 
-# --------------------------
-# Hatch Moves (Open & Close)
-# --------------------------
-with st.expander("🛡️ Hatch Moves"):
-    with st.expander("🔓 Open"):
-        st.number_input("FWD Hatch Open", min_value=0, key="hr_hatch_fwd_open", value=st.session_state["hr_hatch_fwd_open"])
-        st.number_input("MID Hatch Open", min_value=0, key="hr_hatch_mid_open", value=st.session_state["hr_hatch_mid_open"])
-        st.number_input("AFT Hatch Open", min_value=0, key="hr_hatch_aft_open", value=st.session_state["hr_hatch_aft_open"])
-    with st.expander("🔒 Close"):
-        st.number_input("FWD Hatch Close", min_value=0, key="hr_hatch_fwd_close", value=st.session_state["hr_hatch_fwd_close"])
-        st.number_input("MID Hatch Close", min_value=0, key="hr_hatch_mid_close", value=st.session_state["hr_hatch_mid_close"])
-        st.number_input("AFT Hatch Close", min_value=0, key="hr_hatch_aft_close", value=st.session_state["hr_hatch_aft_close"])
-
-# --------------------------
-# Gearbox (hour-only)
-# --------------------------
-with st.expander("⚙️ Gearbox (hourly total)"):
-    st.number_input("Gearbox Total (this hour)", min_value=0, key="hour_gearbox_total", value=st.session_state["hour_gearbox_total"])
-    st.caption("This gearbox line is hourly-only and will not be cumulative. It appears on templates for the hour only.")
-
-# --------------------------
-# Idle / Delays
-# --------------------------
-st.subheader("⏸️ Idle / Delays")
-idle_options = [
-    "Stevedore tea time/shift change",
-    "Awaiting cargo",
-    "Awaiting AGL operations",
-    "Awaiting FPT gang",
-    "Awaiting Crane driver",
-    "Awaiting onboard stevedores",
-    "Windbound",
-    "Crane break down/ wipers",
-    "Crane break down/ lights",
-    "Crane break down/ boom limit",
-    "Crane break down",
-    "Vessel listing",
-    "Struggling to load container",
-    "Cell guide struggles",
-    "Spreader difficulties",
-]
-with st.expander("🛑 Idle Entries", expanded=False):
-    st.number_input("Number of Idle Entries", min_value=0, max_value=10, key="num_idle_entries", value=st.session_state["num_idle_entries"])
-    entries = []
+with st.expander("⏸️ Idle / Delays"):
+    st.number_input("Number of Idle Entries", min_value=0, key="num_idle_entries")
+    idle_entries = []
     for i in range(st.session_state["num_idle_entries"]):
-        st.markdown(f"**Idle Entry {i+1}**")
-        c1, c2, c3, c4 = st.columns([1,1,1,2])
-        crane = c1.text_input(f"Crane {i+1}", key=f"idle_crane_{i}", value="")
-        start = c2.text_input(f"Start {i+1}", key=f"idle_start_{i}", placeholder="e.g., 12h30", value="")
-        end   = c3.text_input(f"End {i+1}",   key=f"idle_end_{i}",   placeholder="e.g., 12h40", value="")
-        sel   = c4.selectbox(f"Delay {i+1}", options=idle_options, key=f"idle_sel_{i}")
-        custom = c4.text_input(f"Custom Delay {i+1} (optional)", key=f"idle_custom_{i}", value="")
-        entries.append({
-            "crane": (crane or "").strip(),
-            "start": (start or "").strip(),
-            "end": (end or "").strip(),
-            "delay": (custom or "").strip() if (custom or "").strip() else sel
-        })
-    # Not a widget key — safe to assign directly
-    st.session_state["idle_entries"] = entries
+        c1, c2, c3 = st.columns([1,1,2])
+        crane = c1.text_input(f"Crane {i+1}", key=f"idle_crane_{i}")
+        start = c2.text_input(f"Start {i+1}", key=f"idle_start_{i}")
+        end = c2.text_input(f"End {i+1}", key=f"idle_end_{i}")
+        delay = c3.text_input(f"Delay {i+1}", key=f"idle_delay_{i}")
+        idle_entries.append({"crane": crane, "start": start, "end": end, "delay": delay})
+    st.session_state["idle_entries"] = idle_entries
 
-# --------------------------
-# Hourly Totals Tracker (split by position)
-# --------------------------
+st.markdown("---")
+# PART 3/5
+
+st.header("📑 Hourly Totals & Report")
+
 def hourly_totals_split():
     ss = st.session_state
     return {
-        "load":       {"FWD": ss["hr_fwd_load"],       "MID": ss["hr_mid_load"],       "AFT": ss["hr_aft_load"],       "POOP": ss["hr_poop_load"]},
-        "disch":      {"FWD": ss["hr_fwd_disch"],      "MID": ss["hr_mid_disch"],      "AFT": ss["hr_aft_disch"],      "POOP": ss["hr_poop_disch"]},
-        "restow_load":{"FWD": ss["hr_fwd_restow_load"],"MID": ss["hr_mid_restow_load"],"AFT": ss["hr_aft_restow_load"],"POOP": ss["hr_poop_restow_load"]},
-        "restow_disch":{"FWD": ss["hr_fwd_restow_disch"],"MID": ss["hr_mid_restow_disch"],"AFT": ss["hr_aft_restow_disch"],"POOP": ss["hr_poop_restow_disch"]},
+        "load":       {"FWD": ss["hr_fwd_load"], "MID": ss["hr_mid_load"], "AFT": ss["hr_aft_load"], "POOP": ss["hr_poop_load"]},
+        "disch":      {"FWD": ss["hr_fwd_disch"], "MID": ss["hr_mid_disch"], "AFT": ss["hr_aft_disch"], "POOP": ss["hr_poop_disch"]},
+        "restow_load":{"FWD": ss["hr_fwd_restow_load"], "MID": ss["hr_mid_restow_load"], "AFT": ss["hr_aft_restow_load"], "POOP": ss["hr_poop_restow_load"]},
+        "restow_disch":{"FWD": ss["hr_fwd_restow_disch"], "MID": ss["hr_mid_restow_disch"], "AFT": ss["hr_aft_restow_disch"], "POOP": ss["hr_poop_restow_disch"]},
         "hatch_open": {"FWD": ss["hr_hatch_fwd_open"], "MID": ss["hr_hatch_mid_open"], "AFT": ss["hr_hatch_aft_open"]},
-        "hatch_close":{"FWD": ss["hr_hatch_fwd_close"],"MID": ss["hr_hatch_mid_close"],"AFT": ss["hr_hatch_aft_close"]},
-        "gearbox": ss.get("hour_gearbox_total", 0)
+        "hatch_close":{"FWD": ss["hr_hatch_fwd_close"], "MID": ss["hr_hatch_mid_close"], "AFT": ss["hr_hatch_aft_close"]},
+        "gearbox": ss["hr_gearbox"],
     }
 
-with st.expander("🧮 Hourly Totals (split by FWD / MID / AFT / POOP)"):
+with st.expander("🧮 Hourly Totals (split)"):
     split = hourly_totals_split()
     st.write(f"**Load**       — FWD {split['load']['FWD']} | MID {split['load']['MID']} | AFT {split['load']['AFT']} | POOP {split['load']['POOP']}")
     st.write(f"**Discharge**  — FWD {split['disch']['FWD']} | MID {split['disch']['MID']} | AFT {split['disch']['AFT']} | POOP {split['disch']['POOP']}")
@@ -429,27 +395,22 @@ with st.expander("🧮 Hourly Totals (split by FWD / MID / AFT / POOP)"):
     st.write(f"**Restow Disch**— FWD {split['restow_disch']['FWD']} | MID {split['restow_disch']['MID']} | AFT {split['restow_disch']['AFT']} | POOP {split['restow_disch']['POOP']}")
     st.write(f"**Hatch Open** — FWD {split['hatch_open']['FWD']} | MID {split['hatch_open']['MID']} | AFT {split['hatch_open']['AFT']}")
     st.write(f"**Hatch Close**— FWD {split['hatch_close']['FWD']} | MID {split['hatch_close']['MID']} | AFT {split['hatch_close']['AFT']}")
-    st.write(f"**Gearbox (this hour):** {split['gearbox']}")
-    # WhatsApp_Report.py  — PART 4 / 5
+    st.write(f"**Gearboxes** — {split['gearbox']}")
 
 # --------------------------
-# WhatsApp (Hourly) – original monospace template (unchanged format)
+# Hourly Template
 # --------------------------
-st.subheader("📱 Send Hourly Report to WhatsApp")
-st.text_input("Enter WhatsApp Number (with country code, e.g., 27761234567)", key="wa_num_hour")
-st.text_input("Or enter WhatsApp Group Link (optional)", key="wa_grp_hour")
-
-def generate_hourly_template_text():
-    # compute remaining using persistent cumulative + opening balances (opening applied once at app start or first generate)
+def generate_hourly_template():
     remaining_load  = st.session_state["planned_load"]  - cumulative["done_load"]
     remaining_disch = st.session_state["planned_disch"] - cumulative["done_disch"]
     remaining_restow_load  = st.session_state["planned_restow_load"]  - cumulative["done_restow_load"]
     remaining_restow_disch = st.session_state["planned_restow_disch"] - cumulative["done_restow_disch"]
 
-    # hour split snapshot
     tmpl = f"""\
 {st.session_state['vessel_name']}
 Berthed {st.session_state['berthed_date']}
+First Lift: {st.session_state['first_lift']}
+Last Lift: {st.session_state['last_lift']}
 
 Date: {st.session_state['report_date'].strftime('%d/%m/%Y')}
 Hour: {st.session_state['hourly_time']}
@@ -470,9 +431,6 @@ MID       {st.session_state['hr_mid_restow_load']:>5}     {st.session_state['hr_
 AFT       {st.session_state['hr_aft_restow_load']:>5}     {st.session_state['hr_aft_restow_disch']:>5}
 POOP      {st.session_state['hr_poop_restow_load']:>5}     {st.session_state['hr_poop_restow_disch']:>5}
 _________________________
-*Gearbox*
-Total (this hour): {st.session_state.get('hour_gearbox_total', 0)}
-_________________________
       *CUMULATIVE*
 _________________________
            Load   Disch
@@ -492,62 +450,41 @@ FWD       {st.session_state['hr_hatch_fwd_open']:>5}      {st.session_state['hr_
 MID       {st.session_state['hr_hatch_mid_open']:>5}      {st.session_state['hr_hatch_mid_close']:>5}
 AFT       {st.session_state['hr_hatch_aft_open']:>5}      {st.session_state['hr_hatch_aft_close']:>5}
 _________________________
+*Gearboxes*
+Total     {st.session_state['hr_gearbox']:>5}
+_________________________
 *Idle / Delays*
 """
     for i, idle in enumerate(st.session_state["idle_entries"]):
         tmpl += f"{i+1}. {idle['crane']} {idle['start']}-{idle['end']} : {idle['delay']}\n"
-    # Add first/last lift info and gearbox lines as previously present in your original template region:
-    tmpl += f"_________________________\nFirst Lift: {st.session_state.get('first_lift','')}\nLast Lift: {st.session_state.get('last_lift','')}\n"
     return tmpl
+    # PART 4/5
 
 # --------------------------
-# Core generate button — single button as requested
+# Hourly Actions
 # --------------------------
 def on_generate_hourly():
-    # Take a snapshot of hourly splits
-    hour_snapshot = {
-        "hr_fwd_load": int(st.session_state["hr_fwd_load"]),
-        "hr_mid_load": int(st.session_state["hr_mid_load"]),
-        "hr_aft_load": int(st.session_state["hr_aft_load"]),
-        "hr_poop_load": int(st.session_state["hr_poop_load"]),
-        "hr_fwd_disch": int(st.session_state["hr_fwd_disch"]),
-        "hr_mid_disch": int(st.session_state["hr_mid_disch"]),
-        "hr_aft_disch": int(st.session_state["hr_aft_disch"]),
-        "hr_poop_disch": int(st.session_state["hr_poop_disch"]),
-        "hr_fwd_restow_load": int(st.session_state["hr_fwd_restow_load"]),
-        "hr_mid_restow_load": int(st.session_state["hr_mid_restow_load"]),
-        "hr_aft_restow_load": int(st.session_state["hr_aft_restow_load"]),
-        "hr_poop_restow_load": int(st.session_state["hr_poop_restow_load"]),
-        "hr_fwd_restow_disch": int(st.session_state["hr_fwd_restow_disch"]),
-        "hr_mid_restow_disch": int(st.session_state["hr_mid_restow_disch"]),
-        "hr_aft_restow_disch": int(st.session_state["hr_aft_restow_disch"]),
-        "hr_poop_restow_disch": int(st.session_state["hr_poop_restow_disch"]),
-        "hr_hatch_fwd_open": int(st.session_state["hr_hatch_fwd_open"]),
-        "hr_hatch_mid_open": int(st.session_state["hr_hatch_mid_open"]),
-        "hr_hatch_aft_open": int(st.session_state["hr_hatch_aft_open"]),
-        "hr_hatch_fwd_close": int(st.session_state["hr_hatch_fwd_close"]),
-        "hr_hatch_mid_close": int(st.session_state["hr_hatch_mid_close"]),
-        "hr_hatch_aft_close": int(st.session_state["hr_hatch_aft_close"]),
-        "gearbox": int(st.session_state.get("hour_gearbox_total", 0)),
-    }
-
-    # Apply opening balances only once (tracking flag in cumulative). This ensures opening balances are counted as Done.
+    # apply openings only once
     if not cumulative.get("_openings_applied", False):
-        # Add openings into done counters so they show as Done in first generate
         cumulative["done_load"] += int(st.session_state.get("opening_load", 0))
         cumulative["done_disch"] += int(st.session_state.get("opening_disch", 0))
         cumulative["done_restow_load"] += int(st.session_state.get("opening_restow_load", 0))
         cumulative["done_restow_disch"] += int(st.session_state.get("opening_restow_disch", 0))
         cumulative["_openings_applied"] = True
 
-    # Update cumulative with this hour's contributions (summing splits)
-    hour_load = hour_snapshot["hr_fwd_load"] + hour_snapshot["hr_mid_load"] + hour_snapshot["hr_aft_load"] + hour_snapshot["hr_poop_load"]
-    hour_disch = hour_snapshot["hr_fwd_disch"] + hour_snapshot["hr_mid_disch"] + hour_snapshot["hr_aft_disch"] + hour_snapshot["hr_poop_disch"]
-    hour_restow_load = hour_snapshot["hr_fwd_restow_load"] + hour_snapshot["hr_mid_restow_load"] + hour_snapshot["hr_aft_restow_load"] + hour_snapshot["hr_poop_restow_load"]
-    hour_restow_disch = hour_snapshot["hr_fwd_restow_disch"] + hour_snapshot["hr_mid_restow_disch"] + hour_snapshot["hr_aft_restow_disch"] + hour_snapshot["hr_poop_restow_disch"]
-    hour_hatch_open = hour_snapshot["hr_hatch_fwd_open"] + hour_snapshot["hr_hatch_mid_open"] + hour_snapshot["hr_hatch_aft_open"]
-    hour_hatch_close = hour_snapshot["hr_hatch_fwd_close"] + hour_snapshot["hr_hatch_mid_close"] + hour_snapshot["hr_hatch_aft_close"]
+    # calculate this hour
+    hour_load = (st.session_state["hr_fwd_load"] + st.session_state["hr_mid_load"] +
+                 st.session_state["hr_aft_load"] + st.session_state["hr_poop_load"])
+    hour_disch = (st.session_state["hr_fwd_disch"] + st.session_state["hr_mid_disch"] +
+                  st.session_state["hr_aft_disch"] + st.session_state["hr_poop_disch"])
+    hour_restow_load = (st.session_state["hr_fwd_restow_load"] + st.session_state["hr_mid_restow_load"] +
+                        st.session_state["hr_aft_restow_load"] + st.session_state["hr_poop_restow_load"])
+    hour_restow_disch = (st.session_state["hr_fwd_restow_disch"] + st.session_state["hr_mid_restow_disch"] +
+                         st.session_state["hr_aft_restow_disch"] + st.session_state["hr_poop_restow_disch"])
+    hour_hatch_open = st.session_state["hr_hatch_fwd_open"] + st.session_state["hr_hatch_mid_open"] + st.session_state["hr_hatch_aft_open"]
+    hour_hatch_close = st.session_state["hr_hatch_fwd_close"] + st.session_state["hr_hatch_mid_close"] + st.session_state["hr_hatch_aft_close"]
 
+    # update cumulative
     cumulative["done_load"] += int(hour_load)
     cumulative["done_disch"] += int(hour_disch)
     cumulative["done_restow_load"] += int(hour_restow_load)
@@ -555,32 +492,22 @@ def on_generate_hourly():
     cumulative["done_hatch_open"] += int(hour_hatch_open)
     cumulative["done_hatch_close"] += int(hour_hatch_close)
 
-    # Ensure Done never exceeds Plan; if it does, bump Plan to keep Remain >= 0
-    # For load:
+    # enforce no overflow past plan totals
     if cumulative["done_load"] > st.session_state["planned_load"]:
         st.session_state["planned_load"] = cumulative["done_load"]
-        save_setting("planned_load", st.session_state["planned_load"])
-        cumulative["planned_load"] = st.session_state["planned_load"]
-    # For disch:
     if cumulative["done_disch"] > st.session_state["planned_disch"]:
         st.session_state["planned_disch"] = cumulative["done_disch"]
-        save_setting("planned_disch", st.session_state["planned_disch"])
-        cumulative["planned_disch"] = st.session_state["planned_disch"]
-    # For restow load:
     if cumulative["done_restow_load"] > st.session_state["planned_restow_load"]:
         st.session_state["planned_restow_load"] = cumulative["done_restow_load"]
-        save_setting("planned_restow_load", st.session_state["planned_restow_load"])
-        cumulative["planned_restow_load"] = st.session_state["planned_restow_load"]
-    # For restow disch:
     if cumulative["done_restow_disch"] > st.session_state["planned_restow_disch"]:
         st.session_state["planned_restow_disch"] = cumulative["done_restow_disch"]
-        save_setting("planned_restow_disch", st.session_state["planned_restow_disch"])
-        cumulative["planned_restow_disch"] = st.session_state["planned_restow_disch"]
 
-    # Persist cumulative & settings to DB
+    # persist info
     cumulative.update({
         "vessel_name": st.session_state["vessel_name"],
         "berthed_date": st.session_state["berthed_date"],
+        "first_lift": st.session_state["first_lift"],
+        "last_lift": st.session_state["last_lift"],
         "planned_load": st.session_state["planned_load"],
         "planned_disch": st.session_state["planned_disch"],
         "planned_restow_load": st.session_state["planned_restow_load"],
@@ -589,112 +516,58 @@ def on_generate_hourly():
         "opening_disch": st.session_state["opening_disch"],
         "opening_restow_load": st.session_state["opening_restow_load"],
         "opening_restow_disch": st.session_state["opening_restow_disch"],
-        "first_lift": st.session_state.get("first_lift", ""),
-        "last_lift": st.session_state.get("last_lift", ""),
-        "last_hour": st.session_state["hourly_time"]
+        "last_hour": st.session_state["hourly_time"],
     })
-    save_cumulative_to_db(cumulative)
-    # Save individual settings to settings table too
-    save_setting("vessel_name", st.session_state["vessel_name"])
-    save_setting("berthed_date", st.session_state["berthed_date"])
-    save_setting("planned_load", st.session_state["planned_load"])
-    save_setting("planned_disch", st.session_state["planned_disch"])
-    save_setting("planned_restow_load", st.session_state["planned_restow_load"])
-    save_setting("planned_restow_disch", st.session_state["planned_restow_disch"])
-    save_setting("opening_load", st.session_state["opening_load"])
-    save_setting("opening_disch", st.session_state["opening_disch"])
-    save_setting("opening_restow_load", st.session_state["opening_restow_load"])
-    save_setting("opening_restow_disch", st.session_state["opening_restow_disch"])
-    save_setting("first_lift", st.session_state.get("first_lift",""))
-    save_setting("last_lift", st.session_state.get("last_lift",""))
+    save_db(cumulative)
 
-    # Append an entry for rolling 4h (store per-position values)
-    hour_entry = {
-        "hour_label": st.session_state["hourly_time"],
-        "load": {
-            "FWD": hour_snapshot["hr_fwd_load"], "MID": hour_snapshot["hr_mid_load"],
-            "AFT": hour_snapshot["hr_aft_load"], "POOP": hour_snapshot["hr_poop_load"]
-        },
-        "disch": {
-            "FWD": hour_snapshot["hr_fwd_disch"], "MID": hour_snapshot["hr_mid_disch"],
-            "AFT": hour_snapshot["hr_aft_disch"], "POOP": hour_snapshot["hr_poop_disch"]
-        },
-        "restow_load": {
-            "FWD": hour_snapshot["hr_fwd_restow_load"], "MID": hour_snapshot["hr_mid_restow_load"],
-            "AFT": hour_snapshot["hr_aft_restow_load"], "POOP": hour_snapshot["hr_poop_restow_load"]
-        },
-        "restow_disch": {
-            "FWD": hour_snapshot["hr_fwd_restow_disch"], "MID": hour_snapshot["hr_mid_restow_disch"],
-            "AFT": hour_snapshot["hr_aft_restow_disch"], "POOP": hour_snapshot["hr_poop_restow_disch"]
-        },
-        "hatch_open": {
-            "FWD": hour_snapshot["hr_hatch_fwd_open"], "MID": hour_snapshot["hr_hatch_mid_open"], "AFT": hour_snapshot["hr_hatch_aft_open"]
-        },
-        "hatch_close": {
-            "FWD": hour_snapshot["hr_hatch_fwd_close"], "MID": hour_snapshot["hr_hatch_mid_close"], "AFT": hour_snapshot["hr_hatch_aft_close"]
-        },
-        "gearbox": hour_snapshot["gearbox"]
-    }
-    append_fourh_entry(st.session_state["hourly_time"], hour_entry)
+    # update 4-hour tracker
+    add_current_hour_to_4h()
 
-    # Also update the in-memory fourh session tracker for quick computed_4h readings
-    tr = st.session_state["fourh"]
-    tr["fwd_load"].append(hour_snapshot["hr_fwd_load"])
-    tr["mid_load"].append(hour_snapshot["hr_mid_load"])
-    tr["aft_load"].append(hour_snapshot["hr_aft_load"])
-    tr["poop_load"].append(hour_snapshot["hr_poop_load"])
-    tr["fwd_disch"].append(hour_snapshot["hr_fwd_disch"])
-    tr["mid_disch"].append(hour_snapshot["hr_mid_disch"])
-    tr["aft_disch"].append(hour_snapshot["hr_aft_disch"])
-    tr["poop_disch"].append(hour_snapshot["hr_poop_disch"])
-    tr["fwd_restow_load"].append(hour_snapshot["hr_fwd_restow_load"])
-    tr["mid_restow_load"].append(hour_snapshot["hr_mid_restow_load"])
-    tr["aft_restow_load"].append(hour_snapshot["hr_aft_restow_load"])
-    tr["poop_restow_load"].append(hour_snapshot["hr_poop_restow_load"])
-    tr["fwd_restow_disch"].append(hour_snapshot["hr_fwd_restow_disch"])
-    tr["mid_restow_disch"].append(hour_snapshot["hr_mid_restow_disch"])
-    tr["aft_restow_disch"].append(hour_snapshot["hr_aft_restow_disch"])
-    tr["poop_restow_disch"].append(hour_snapshot["hr_poop_restow_disch"])
-    tr["hatch_fwd_open"].append(hour_snapshot["hr_hatch_fwd_open"])
-    tr["hatch_mid_open"].append(hour_snapshot["hr_hatch_mid_open"])
-    tr["hatch_aft_open"].append(hour_snapshot["hr_hatch_aft_open"])
-    tr["hatch_fwd_close"].append(hour_snapshot["hr_hatch_fwd_close"])
-    tr["hatch_mid_close"].append(hour_snapshot["hr_hatch_mid_close"])
-    tr["hatch_aft_close"].append(hour_snapshot["hr_hatch_aft_close"])
-    tr["count_hours"] = min(4, tr["count_hours"] + 1)
-    # Keep last 4
-    for k in tr.keys():
-        if isinstance(tr[k], list):
-            tr[k] = tr[k][-4:]
-
-    # Advance hour safely via override - applied before selectbox rendering next script run
+    # advance hour
     st.session_state["hourly_time_override"] = next_hour_label(st.session_state["hourly_time"])
 
-    # Return template text for immediate display
-    return generate_hourly_template_text()
+    # return template text
+    return generate_hourly_template()
 
-# Single generate button
-if st.button("✅ Generate Hourly Template & Update Totals"):
-    txt = on_generate_hourly()
-    st.code(txt, language="text")
+# --- Buttons ---
+col1, col2 = st.columns([1,1])
+with col1:
+    if st.button("✅ Generate Hourly Template & Update Totals"):
+        txt = on_generate_hourly()
+        st.code(txt, language="text")
+with col2:
+    if st.button("📤 Open WhatsApp (Hourly)"):
+        txt = generate_hourly_template()
+        wa_text = f"```{txt}```"
+        if st.session_state.get("wa_num_hour"):
+            link = f"https://wa.me/{st.session_state['wa_num_hour']}?text={urllib.parse.quote(wa_text)}"
+            st.markdown(f"[Open WhatsApp]({link})", unsafe_allow_html=True)
+        elif st.session_state.get("wa_grp_hour"):
+            st.markdown(f"[Open WhatsApp Group]({st.session_state['wa_grp_hour']})", unsafe_allow_html=True)
+        else:
+            st.info("Enter a WhatsApp number or group link to send.")
 
-# Offer Open WhatsApp (still optional)
-if st.button("📤 Open WhatsApp (Hourly)"):
-    txt = generate_hourly_template_text()
-    wa_text = f"```{txt}```"
-    if st.session_state.get("wa_num_hour"):
-        link = f"https://wa.me/{st.session_state['wa_num_hour']}?text={urllib.parse.quote(wa_text)}"
-        st.markdown(f"[Open WhatsApp]({link})", unsafe_allow_html=True)
-    elif st.session_state.get("wa_grp_hour"):
-        st.markdown(f"[Open WhatsApp Group]({st.session_state['wa_grp_hour']})", unsafe_allow_html=True)
-    else:
-        st.info("Enter a WhatsApp number or group link to send.")
-        # WhatsApp_Report.py  — PART 5 / 5
+# Reset Hourly
+def reset_hourly_inputs():
+    for k in [
+        "hr_fwd_load","hr_mid_load","hr_aft_load","hr_poop_load",
+        "hr_fwd_disch","hr_mid_disch","hr_aft_disch","hr_poop_disch",
+        "hr_fwd_restow_load","hr_mid_restow_load","hr_aft_restow_load","hr_poop_restow_load",
+        "hr_fwd_restow_disch","hr_mid_restow_disch","hr_aft_restow_disch","hr_poop_restow_disch",
+        "hr_hatch_fwd_open","hr_hatch_mid_open","hr_hatch_aft_open",
+        "hr_hatch_fwd_close","hr_hatch_mid_close","hr_hatch_aft_close",
+        "hr_gearbox"
+    ]:
+        st.session_state[k] = 0
+    st.session_state["hourly_time_override"] = next_hour_label(st.session_state["hourly_time"])
+
+st.button("🔄 Reset Hourly Inputs (and advance hour)", on_click=reset_hourly_inputs)
+# PART 5/5
 
 st.markdown("---")
 st.header("📊 4-Hourly Tracker & Report")
 
-# pick 4-hour block label safely
+# 4-hour block selector
 block_opts = four_hour_blocks()
 if st.session_state["fourh_block"] not in block_opts:
     st.session_state["fourh_block"] = block_opts[0]
@@ -702,31 +575,44 @@ st.selectbox("Select 4-Hour Block", options=block_opts,
              index=block_opts.index(st.session_state["fourh_block"]),
              key="fourh_block")
 
-def sum_list(lst):
-    return int(sum(lst)) if lst else 0
-
+# --- 4H Calculations ---
 def computed_4h():
     tr = st.session_state["fourh"]
     return {
-        "fwd_load": sum_list(tr["fwd_load"]), "mid_load": sum_list(tr["mid_load"]), "aft_load": sum_list(tr["aft_load"]), "poop_load": sum_list(tr["poop_load"]),
-        "fwd_disch": sum_list(tr["fwd_disch"]), "mid_disch": sum_list(tr["mid_disch"]), "aft_disch": sum_list(tr["aft_disch"]), "poop_disch": sum_list(tr["poop_disch"]),
-        "fwd_restow_load": sum_list(tr["fwd_restow_load"]), "mid_restow_load": sum_list(tr["mid_restow_load"]), "aft_restow_load": sum_list(tr["aft_restow_load"]), "poop_restow_load": sum_list(tr["poop_restow_load"]),
-        "fwd_restow_disch": sum_list(tr["fwd_restow_disch"]), "mid_restow_disch": sum_list(tr["mid_restow_disch"]), "aft_restow_disch": sum_list(tr["aft_restow_disch"]), "poop_restow_disch": sum_list(tr["poop_restow_disch"]),
-        "hatch_fwd_open": sum_list(tr["hatch_fwd_open"]), "hatch_mid_open": sum_list(tr["hatch_mid_open"]), "hatch_aft_open": sum_list(tr["hatch_aft_open"]),
-        "hatch_fwd_close": sum_list(tr["hatch_fwd_close"]), "hatch_mid_close": sum_list(tr["hatch_mid_close"]), "hatch_aft_close": sum_list(tr["hatch_aft_close"]),
+        "fwd_load": sum_list(tr["fwd_load"]), "mid_load": sum_list(tr["mid_load"]),
+        "aft_load": sum_list(tr["aft_load"]), "poop_load": sum_list(tr["poop_load"]),
+        "fwd_disch": sum_list(tr["fwd_disch"]), "mid_disch": sum_list(tr["mid_disch"]),
+        "aft_disch": sum_list(tr["aft_disch"]), "poop_disch": sum_list(tr["poop_disch"]),
+        "fwd_restow_load": sum_list(tr["fwd_restow_load"]), "mid_restow_load": sum_list(tr["mid_restow_load"]),
+        "aft_restow_load": sum_list(tr["aft_restow_load"]), "poop_restow_load": sum_list(tr["poop_restow_load"]),
+        "fwd_restow_disch": sum_list(tr["fwd_restow_disch"]), "mid_restow_disch": sum_list(tr["mid_restow_disch"]),
+        "aft_restow_disch": sum_list(tr["aft_restow_disch"]), "poop_restow_disch": sum_list(tr["poop_restow_disch"]),
+        "hatch_fwd_open": sum_list(tr["hatch_fwd_open"]), "hatch_mid_open": sum_list(tr["hatch_mid_open"]),
+        "hatch_aft_open": sum_list(tr["hatch_aft_open"]),
+        "hatch_fwd_close": sum_list(tr["hatch_fwd_close"]), "hatch_mid_close": sum_list(tr["hatch_mid_close"]),
+        "hatch_aft_close": sum_list(tr["hatch_aft_close"]),
+        "gearbox": sum_list(tr.get("gearbox", [])),
     }
 
 def manual_4h():
     ss = st.session_state
     return {
-        "fwd_load": ss["m4h_fwd_load"], "mid_load": ss["m4h_mid_load"], "aft_load": ss["m4h_aft_load"], "poop_load": ss["m4h_poop_load"],
-        "fwd_disch": ss["m4h_fwd_disch"], "mid_disch": ss["m4h_mid_disch"], "aft_disch": ss["m4h_aft_disch"], "poop_disch": ss["m4h_poop_disch"],
-        "fwd_restow_load": ss["m4h_fwd_restow_load"], "mid_restow_load": ss["m4h_mid_restow_load"], "aft_restow_load": ss["m4h_aft_restow_load"], "poop_restow_load": ss["m4h_poop_restow_load"],
-        "fwd_restow_disch": ss["m4h_fwd_restow_disch"], "mid_restow_disch": ss["m4h_mid_restow_disch"], "aft_restow_disch": ss["m4h_aft_restow_disch"], "poop_restow_disch": ss["m4h_poop_restow_disch"],
-        "hatch_fwd_open": ss["m4h_hatch_fwd_open"], "hatch_mid_open": ss["m4h_hatch_mid_open"], "hatch_aft_open": ss["m4h_hatch_aft_open"],
-        "hatch_fwd_close": ss["m4h_hatch_fwd_close"], "hatch_mid_close": ss["m4h_hatch_mid_close"], "hatch_aft_close": ss["m4h_hatch_aft_close"],
+        "fwd_load": ss["m4h_fwd_load"], "mid_load": ss["m4h_mid_load"],
+        "aft_load": ss["m4h_aft_load"], "poop_load": ss["m4h_poop_load"],
+        "fwd_disch": ss["m4h_fwd_disch"], "mid_disch": ss["m4h_mid_disch"],
+        "aft_disch": ss["m4h_aft_disch"], "poop_disch": ss["m4h_poop_disch"],
+        "fwd_restow_load": ss["m4h_fwd_restow_load"], "mid_restow_load": ss["m4h_mid_restow_load"],
+        "aft_restow_load": ss["m4h_aft_restow_load"], "poop_restow_load": ss["m4h_poop_restow_load"],
+        "fwd_restow_disch": ss["m4h_fwd_restow_disch"], "mid_restow_disch": ss["m4h_mid_restow_disch"],
+        "aft_restow_disch": ss["m4h_aft_restow_disch"], "poop_restow_disch": ss["m4h_poop_restow_disch"],
+        "hatch_fwd_open": ss["m4h_hatch_fwd_open"], "hatch_mid_open": ss["m4h_hatch_mid_open"],
+        "hatch_aft_open": ss["m4h_hatch_aft_open"],
+        "hatch_fwd_close": ss["m4h_hatch_fwd_close"], "hatch_mid_close": ss["m4h_hatch_mid_close"],
+        "hatch_aft_close": ss["m4h_hatch_aft_close"],
+        "gearbox": ss.get("m4h_gearbox", 0),
     }
 
+# Auto totals
 with st.expander("🧮 4-Hour Totals (auto-calculated)"):
     calc = computed_4h()
     st.write(f"**Crane Moves – Load:** FWD {calc['fwd_load']} | MID {calc['mid_load']} | AFT {calc['aft_load']} | POOP {calc['poop_load']}")
@@ -735,7 +621,9 @@ with st.expander("🧮 4-Hour Totals (auto-calculated)"):
     st.write(f"**Restows – Discharge:** FWD {calc['fwd_restow_disch']} | MID {calc['mid_restow_disch']} | AFT {calc['aft_restow_disch']} | POOP {calc['poop_restow_disch']}")
     st.write(f"**Hatch Open:** FWD {calc['hatch_fwd_open']} | MID {calc['hatch_mid_open']} | AFT {calc['hatch_aft_open']}")
     st.write(f"**Hatch Close:** FWD {calc['hatch_fwd_close']} | MID {calc['hatch_mid_close']} | AFT {calc['hatch_aft_close']}")
+    st.write(f"**Gearbox Total:** {calc['gearbox']}")
 
+# Manual override
 with st.expander("✏️ Manual Override 4-Hour Totals", expanded=False):
     st.checkbox("Use manual totals instead of auto-calculated", key="fourh_manual_override")
     c1, c2, c3, c4 = st.columns(4)
@@ -744,75 +632,39 @@ with st.expander("✏️ Manual Override 4-Hour Totals", expanded=False):
         st.number_input("FWD Disch 4H", min_value=0, key="m4h_fwd_disch")
         st.number_input("FWD Rst Load 4H", min_value=0, key="m4h_fwd_restow_load")
         st.number_input("FWD Rst Disch 4H", min_value=0, key="m4h_fwd_restow_disch")
-        st.number_input("FWD Hatch Open 4H", min_value=0, key="m4h_hatch_fwd_open")
-        st.number_input("FWD Hatch Close 4H", min_value=0, key="m4h_hatch_fwd_close")
     with c2:
         st.number_input("MID Load 4H", min_value=0, key="m4h_mid_load")
         st.number_input("MID Disch 4H", min_value=0, key="m4h_mid_disch")
         st.number_input("MID Rst Load 4H", min_value=0, key="m4h_mid_restow_load")
         st.number_input("MID Rst Disch 4H", min_value=0, key="m4h_mid_restow_disch")
-        st.number_input("MID Hatch Open 4H", min_value=0, key="m4h_hatch_mid_open")
-        st.number_input("MID Hatch Close 4H", min_value=0, key="m4h_hatch_mid_close")
     with c3:
         st.number_input("AFT Load 4H", min_value=0, key="m4h_aft_load")
         st.number_input("AFT Disch 4H", min_value=0, key="m4h_aft_disch")
         st.number_input("AFT Rst Load 4H", min_value=0, key="m4h_aft_restow_load")
         st.number_input("AFT Rst Disch 4H", min_value=0, key="m4h_aft_restow_disch")
-        st.number_input("AFT Hatch Open 4H", min_value=0, key="m4h_hatch_aft_open")
-        st.number_input("AFT Hatch Close 4H", min_value=0, key="m4h_hatch_aft_close")
     with c4:
         st.number_input("POOP Load 4H", min_value=0, key="m4h_poop_load")
         st.number_input("POOP Disch 4H", min_value=0, key="m4h_poop_disch")
         st.number_input("POOP Rst Load 4H", min_value=0, key="m4h_poop_restow_load")
         st.number_input("POOP Rst Disch 4H", min_value=0, key="m4h_poop_restow_disch")
+        st.number_input("Gearbox 4H", min_value=0, key="m4h_gearbox")
 
-# --- NEW BUTTON: populate manual 4H fields from computed 4H tracker ---
-if st.button("⏬ Populate 4-Hourly from Hourly Tracker"):
-    calc_vals = computed_4h()
-    # map computed values into manual 4h session keys
-    st.session_state["m4h_fwd_load"] = calc_vals["fwd_load"]
-    st.session_state["m4h_mid_load"] = calc_vals["mid_load"]
-    st.session_state["m4h_aft_load"] = calc_vals["aft_load"]
-    st.session_state["m4h_poop_load"] = calc_vals["poop_load"]
-
-    st.session_state["m4h_fwd_disch"] = calc_vals["fwd_disch"]
-    st.session_state["m4h_mid_disch"] = calc_vals["mid_disch"]
-    st.session_state["m4h_aft_disch"] = calc_vals["aft_disch"]
-    st.session_state["m4h_poop_disch"] = calc_vals["poop_disch"]
-
-    st.session_state["m4h_fwd_restow_load"] = calc_vals["fwd_restow_load"]
-    st.session_state["m4h_mid_restow_load"] = calc_vals["mid_restow_load"]
-    st.session_state["m4h_aft_restow_load"] = calc_vals["aft_restow_load"]
-    st.session_state["m4h_poop_restow_load"] = calc_vals["poop_restow_load"]
-
-    st.session_state["m4h_fwd_restow_disch"] = calc_vals["fwd_restow_disch"]
-    st.session_state["m4h_mid_restow_disch"] = calc_vals["mid_restow_disch"]
-    st.session_state["m4h_aft_restow_disch"] = calc_vals["aft_restow_disch"]
-    st.session_state["m4h_poop_restow_disch"] = calc_vals["poop_restow_disch"]
-
-    st.session_state["m4h_hatch_fwd_open"] = calc_vals["hatch_fwd_open"]
-    st.session_state["m4h_hatch_mid_open"] = calc_vals["hatch_mid_open"]
-    st.session_state["m4h_hatch_aft_open"] = calc_vals["hatch_aft_open"]
-
-    st.session_state["m4h_hatch_fwd_close"] = calc_vals["hatch_fwd_close"]
-    st.session_state["m4h_hatch_mid_close"] = calc_vals["hatch_mid_close"]
-    st.session_state["m4h_hatch_aft_close"] = calc_vals["hatch_aft_close"]
-
-    # enable manual override so template will use these values
-    st.session_state["fourh_manual_override"] = True
-    st.success("Manual 4-hour inputs populated from hourly tracker; manual override enabled.")
-
+# Select values
 vals4h = manual_4h() if st.session_state["fourh_manual_override"] else computed_4h()
 
+# --- 4H Template ---
 def generate_4h_template():
-    remaining_load  = st.session_state["planned_load"]  - cumulative["done_load"]
-    remaining_disch = st.session_state["planned_disch"] - cumulative["done_disch"]
-    remaining_restow_load  = st.session_state["planned_restow_load"]  - cumulative["done_restow_load"]
-    remaining_restow_disch = st.session_state["planned_restow_disch"] - cumulative["done_restow_disch"]
+    remaining_load = st.session_state["planned_load"] - cumulative["done_load"] - st.session_state["opening_load"]
+    remaining_disch = st.session_state["planned_disch"] - cumulative["done_disch"] - st.session_state["opening_disch"]
+    remaining_restow_load = st.session_state["planned_restow_load"] - cumulative["done_restow_load"] - st.session_state["opening_restow_load"]
+    remaining_restow_disch = st.session_state["planned_restow_disch"] - cumulative["done_restow_disch"] - st.session_state["opening_restow_disch"]
 
     t = f"""\
 {st.session_state['vessel_name']}
 Berthed {st.session_state['berthed_date']}
+
+First Lift @ {st.session_state['first_lift']}
+Last Lift @ {st.session_state['last_lift']}
 
 Date: {st.session_state['report_date'].strftime('%d/%m/%Y')}
 4-Hour Block: {st.session_state['fourh_block']}
@@ -820,20 +672,20 @@ _________________________
    *HOURLY MOVES*
 _________________________
 *Crane Moves*
-           Load    Discharge
+           Load   Discharge
 FWD       {vals4h['fwd_load']:>5}     {vals4h['fwd_disch']:>5}
 MID       {vals4h['mid_load']:>5}     {vals4h['mid_disch']:>5}
 AFT       {vals4h['aft_load']:>5}     {vals4h['aft_disch']:>5}
-POOP      {vals4h['poop_load']:>5}     {vals4h['poop_disch']:>5}
+POOP      {vals4h['poop_load']:>5}    {vals4h['poop_disch']:>5}
 _________________________
 *Restows*
-           Load    Discharge
+           Load   Discharge
 FWD       {vals4h['fwd_restow_load']:>5}     {vals4h['fwd_restow_disch']:>5}
 MID       {vals4h['mid_restow_load']:>5}     {vals4h['mid_restow_disch']:>5}
 AFT       {vals4h['aft_restow_load']:>5}     {vals4h['aft_restow_disch']:>5}
-POOP      {vals4h['poop_restow_load']:>5}     {vals4h['poop_restow_disch']:>5}
+POOP      {vals4h['poop_restow_load']:>5}    {vals4h['poop_restow_disch']:>5}
 _________________________
-      *CUMULATIVE* (from hourly saved entries)
+      *CUMULATIVE*
 _________________________
            Load   Disch
 Plan       {st.session_state['planned_load']:>5}      {st.session_state['planned_disch']:>5}
@@ -841,35 +693,39 @@ Done       {cumulative['done_load']:>5}      {cumulative['done_disch']:>5}
 Remain     {remaining_load:>5}      {remaining_disch:>5}
 _________________________
 *Restows*
-           Load    Disch
+           Load   Disch
 Plan       {st.session_state['planned_restow_load']:>5}      {st.session_state['planned_restow_disch']:>5}
 Done       {cumulative['done_restow_load']:>5}      {cumulative['done_restow_disch']:>5}
 Remain     {remaining_restow_load:>5}      {remaining_restow_disch:>5}
 _________________________
 *Hatch Moves*
-             Open         Close
-FWD          {vals4h['hatch_fwd_open']:>5}          {vals4h['hatch_fwd_close']:>5}
-MID          {vals4h['hatch_mid_open']:>5}          {vals4h['hatch_mid_close']:>5}
-AFT          {vals4h['hatch_aft_open']:>5}          {vals4h['hatch_aft_close']:>5}
+           Open   Close
+FWD       {vals4h['hatch_fwd_open']:>5}      {vals4h['hatch_fwd_close']:>5}
+MID       {vals4h['hatch_mid_open']:>5}      {vals4h['hatch_mid_close']:>5}
+AFT       {vals4h['hatch_aft_open']:>5}      {vals4h['hatch_aft_close']:>5}
+_________________________
+*Gearbox*
+Total     {vals4h['gearbox']:>5}
 _________________________
 *Idle / Delays*
 """
     for i, idle in enumerate(st.session_state["idle_entries"]):
         t += f"{i+1}. {idle['crane']} {idle['start']}-{idle['end']} : {idle['delay']}\n"
-    t += f"_________________________\nFirst Lift: {st.session_state.get('first_lift','')}\nLast Lift: {st.session_state.get('last_lift','')}\n"
     return t
 
+# Display template
 st.code(generate_4h_template(), language="text")
 
+# WhatsApp
 st.subheader("📱 Send 4-Hourly Report to WhatsApp")
 st.text_input("Enter WhatsApp Number for 4H report (optional)", key="wa_num_4h")
 st.text_input("Or enter WhatsApp Group Link for 4H report (optional)", key="wa_grp_4h")
 
-cA, cB, cC = st.columns([1,1,1])
-with cA:
-    if st.button("👁️ Preview 4-Hourly Template Only"):
+colA, colB, colC = st.columns([1,1,1])
+with colA:
+    if st.button("✅ Generate 4-Hourly Template"):
         st.code(generate_4h_template(), language="text")
-with cB:
+with colB:
     if st.button("📤 Open WhatsApp (4-Hourly)"):
         t = generate_4h_template()
         wa_text = f"```{t}```"
@@ -880,69 +736,23 @@ with cB:
             st.markdown(f"[Open WhatsApp Group]({st.session_state['wa_grp_4h']})", unsafe_allow_html=True)
         else:
             st.info("Enter a WhatsApp number or group link to send.")
-with cC:
-    if st.button("🔄 Reset 4-Hourly Tracker (clear last 4 hours)"):
-        st.session_state["fourh"] = empty_tracker()
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM fourh_entries;")
-        conn.commit()
-        conn.close()
+with colC:
+    if st.button("🔄 Reset 4-Hourly Tracker"):
+        reset_4h_tracker()
         st.success("4-hourly tracker reset.")
 
-# --------------------------
-# Hourly Reset & Master Reset
-# --------------------------
-def reset_hourly_inputs():
-    for k in [
-        "hr_fwd_load","hr_mid_load","hr_aft_load","hr_poop_load",
-        "hr_fwd_disch","hr_mid_disch","hr_aft_disch","hr_poop_disch",
-        "hr_fwd_restow_load","hr_mid_restow_load","hr_aft_restow_load","hr_poop_restow_load",
-        "hr_fwd_restow_disch","hr_mid_restow_disch","hr_aft_restow_disch","hr_poop_restow_disch",
-        "hr_hatch_fwd_open","hr_hatch_mid_open","hr_hatch_aft_open",
-        "hr_hatch_fwd_close","hr_hatch_mid_close","hr_hatch_aft_close",
-        "hour_gearbox_total"
-    ]:
-        st.session_state[k] = 0
-    st.success("Hourly inputs cleared for the next hour.")
-
-st.button("🔄 Reset Hourly Inputs (clear only hourly inputs)", on_click=reset_hourly_inputs)
-
+# --- Master Reset ---
 def master_reset():
-    # Reset DB to defaults (meta) and clear settings & fourh entries
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM settings;")
-    cur.execute("DELETE FROM fourh_entries;")
-    cur.execute("UPDATE meta SET json = ? WHERE id = 1;", (json.dumps(DEFAULT_CUMULATIVE),))
-    conn.commit()
-    conn.close()
-    # Reset session
-    for k in list(st.session_state.keys()):
-        del st.session_state[k]
-    st.experimental_rerun()
+    st.session_state.clear()
+    if os.path.exists(DB_FILE):
+        os.remove(DB_FILE)
+    st.success("🔄 Master reset complete. All data cleared.")
 
-if st.button("⚠️ Master Reset (clear everything)"):
-    st.warning("This will clear all saved settings and cumulative totals. Confirm to proceed.")
-    if st.button("Confirm Master Reset — Yes, clear everything"):
-        master_reset()
+st.button("🛑 Master Reset (clear everything)", on_click=master_reset)
 
-st.markdown("---")
 st.caption(
     "• Hourly: Use **Generate Hourly Template** to add the hour to cumulative and the 4-hour tracker. "
-    "• 4-Hourly: Use **Populate 4-Hourly** if you want to copy hourly rolling totals into the 4-hour manual input. "
-    "• Resets: Hourly reset clears only the hourly inputs. 4-hourly reset clears the 4-hour tracker. Master reset clears everything (DB + session). "
-    "• Opening balances are applied once (on first Generate) so they appear as Done and reduce Remain. "
-        )
-# Ensure all cumulative keys exist with default values
-required_keys = [
-    "done_load","done_disch","done_restow_load","done_restow_disch",
-    "done_hatch_open","done_hatch_close","done_gearbox",
-    "planned_load","planned_disch","planned_restow_load","planned_restow_disch",
-    "opening_load","opening_disch","opening_restow_load","opening_restow_disch",
-    "vessel_name","berthed_date","first_lift","last_lift"
-]
-
-for k in required_keys:
-    if k not in cumulative:
-        cumulative[k] = 0 if "done" in k or "planned" in k or "opening" in k else ""
+    "• 4-Hourly: Use **Manual Override** only if the auto tracker missed something. "
+    "• Reset buttons clear values but do not loop. "
+    "• Master Reset clears everything including vessel info."
+    )
