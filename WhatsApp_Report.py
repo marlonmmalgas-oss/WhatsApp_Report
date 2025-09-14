@@ -462,6 +462,8 @@ def generate_hourly_template_text(cum_snapshot):
     tmpl = f"""\
 {cum_snapshot['vessel_name']}
 Berthed {cum_snapshot['berthed_date']}
+First Lift: {st.session_state.get('first_lift','')}
+Last Lift: {st.session_state.get('last_lift','')}
 
 Date: {st.session_state['report_date'].strftime('%d/%m/%Y')}
 Hour: {st.session_state['hourly_time']}
@@ -505,8 +507,6 @@ MID       {st.session_state['hr_hatch_mid_open']:>5}      {st.session_state['hr_
 AFT       {st.session_state['hr_hatch_aft_open']:>5}      {st.session_state['hr_hatch_aft_close']:>5}
 _________________________
 *Idle / Delays*
-First Lift: {st.session_state.get('first_lift','')}
-Last Lift: {st.session_state.get('last_lift','')}
 """
     for i, idle in enumerate(st.session_state["idle_entries"]):
         tmpl += f"{i+1}. {idle['crane']} {idle['start']}-{idle['end']} : {idle['delay']}\n"
@@ -755,6 +755,8 @@ def generate_4h_template():
     t = f"""\
 {st.session_state.get('vessel_name',cumulative_db.get('vessel_name'))}
 Berthed {st.session_state.get('berthed_date',cumulative_db.get('berthed_date'))}
+First Lift: {st.session_state.get('first_lift','')}
+Last Lift: {st.session_state.get('last_lift','')}
 
 Date: {st.session_state['report_date'].strftime('%d/%m/%Y')}
 4-Hour Block: {st.session_state['fourh_block']}
@@ -795,8 +797,6 @@ MID          {vals4h['hatch_mid_open']:>5}          {vals4h['hatch_mid_close']:>
 AFT          {vals4h['hatch_aft_open']:>5}          {vals4h['hatch_aft_close']:>5}
 _________________________
 *Idle / Delays*
-First Lift: {st.session_state.get('first_lift','')}
-Last Lift: {st.session_state.get('last_lift','')}
 """
     for i, idle in enumerate(st.session_state["idle_entries"]):
         t += f"{i+1}. {idle['crane']} {idle['start']}-{idle['end']} : {idle['delay']}\n"
